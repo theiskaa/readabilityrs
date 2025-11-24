@@ -1,5 +1,11 @@
 # ReadabilityRS
 
+[![Crates.io](https://img.shields.io/crates/v/readabilityrs)](https://crates.io/crates/readabilityrs)
+[![Documentation](https://img.shields.io/docsrs/readabilityrs)](https://docs.rs/readabilityrs)
+[![License](https://img.shields.io/crates/l/readabilityrs)](LICENSE)
+[![Downloads](https://img.shields.io/crates/d/readabilityrs)](https://crates.io/crates/readabilityrs)
+[![GitHub Stars](https://img.shields.io/github/stars/theiskaa/readabilityrs)](https://github.com/theiskaa/readabilityrs/stargazers)
+
 readabilityrs extracts article content from HTML web pages using Mozilla's Readability algorithm. The library identifies and isolates the main article text, removing navigation, advertisements, and other clutter. Metadata extraction includes title, author, publication date, and excerpt generation.
 
 This is a Rust port of [Mozilla's Readability.js](https://github.com/mozilla/readability), which powers Firefox's Reader View. The implementation passes 93.8% of Mozilla's test suite (122/130 tests) with full document preprocessing support. Built in Rust for performance, memory safety, and zero-cost abstractions.

@@ -8,6 +8,7 @@ license = "Apache-2.0"
 repository = "https://github.com/theiskaa/readabilityrs"
 keywords = ["readability", "parser", "article", "extraction", "html"]
 categories = ["parser-implementations", "web-programming"]
+readme = "README.md"
 
 [dependencies]
 html5ever = "0.27"
