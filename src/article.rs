@@ -58,7 +58,7 @@ use serde::{Deserialize, Serialize};
 ///     println!("{}", json);
 /// }
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Article {
     /// The article title extracted from metadata or the document.
     ///
@@ -135,24 +135,6 @@ pub struct Article {
     /// This is the extracted content before the final cleaning steps,
     /// useful for debugging or custom post-processing.
     pub raw_content: Option<String>,
-}
-
-impl Default for Article {
-    fn default() -> Self {
-        Self {
-            title: None,
-            content: None,
-            text_content: None,
-            length: 0,
-            excerpt: None,
-            byline: None,
-            dir: None,
-            site_name: None,
-            lang: None,
-            published_time: None,
-            raw_content: None,
-        }
-    }
 }
 
 impl Article {
