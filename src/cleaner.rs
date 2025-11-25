@@ -7,26 +7,12 @@ use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use scraper::{ElementRef, Html, Selector};
 
-/// Clean and post-process extracted article content
+/// Clean and post-process extracted article content (light version)
 ///
 /// This function:
-/// - Removes unwanted elements (scripts, styles, forms, etc.)
 /// - Fixes relative URLs to absolute
-/// - Cleans up empty elements
-/// - Normalizes whitespace
-pub fn clean_article_content(html: &str, base_url: Option<&str>) -> Result<String> {
-    clean_article_content_internal(html, base_url, true)
-}
-
+/// - Removes nav-like sections
 pub fn clean_article_content_light(html: &str, base_url: Option<&str>) -> Result<String> {
-    clean_article_content_internal(html, base_url, false)
-}
-
-fn clean_article_content_internal(
-    html: &str,
-    base_url: Option<&str>,
-    run_dom_cleaning: bool,
-) -> Result<String> {
     let mut result = html.to_string();
 
     if let Some(base) = base_url {
@@ -34,10 +20,20 @@ fn clean_article_content_internal(
     }
 
     result = remove_nav_like_sections(&result);
-    if run_dom_cleaning {
-        result = remove_conditionally(&result);
-    }
 
+    Ok(result)
+}
+
+/// Clean and post-process extracted article content (full version)
+///
+/// This function:
+/// - Removes unwanted elements (scripts, styles, forms, etc.)
+/// - Fixes relative URLs to absolute
+/// - Cleans up empty elements
+/// - Normalizes whitespace
+pub fn clean_article_content(html: &str, base_url: Option<&str>) -> Result<String> {
+    let mut result = clean_article_content_light(html, base_url)?;
+    result = remove_conditionally(&result);
     Ok(result)
 }
 
