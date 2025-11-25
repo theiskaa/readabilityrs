@@ -25,8 +25,7 @@ pub fn get_class_weight(element: ElementRef, flags: ParseFlags) -> i32 {
         if !class.is_empty() {
             if REGEXPS.negative.is_match(class) {
                 weight -= 25;
-            }
-            if REGEXPS.positive.is_match(class) {
+            } else if REGEXPS.positive.is_match(class) {
                 weight += 25;
             }
         }
@@ -37,8 +36,7 @@ pub fn get_class_weight(element: ElementRef, flags: ParseFlags) -> i32 {
         if !id.is_empty() {
             if REGEXPS.negative.is_match(id) {
                 weight -= 25;
-            }
-            if REGEXPS.positive.is_match(id) {
+            } else if REGEXPS.positive.is_match(id) {
                 weight += 25;
             }
         }
