@@ -833,7 +833,7 @@ fn should_convert_div_to_p(element: ElementRef) -> bool {
         if let Some(child_elem) = ElementRef::wrap(child) {
             let child_tag = child_elem.value().name().to_uppercase();
 
-            if DIV_TO_P_ELEMS.contains(child_tag.as_str()) {
+            if DIV_TO_P_ELEMS.contains(&child_tag.as_str()) {
                 return false;
             }
         }
