@@ -64,7 +64,7 @@ pub fn get_link_density(element: ElementRef) -> f64 {
 pub fn is_phrasing_content(element: ElementRef) -> bool {
     let tag_name = element.value().name().to_uppercase();
 
-    if PHRASING_ELEMS.contains(tag_name.as_str()) {
+    if PHRASING_ELEMS.contains(&tag_name.as_str()) {
         return true;
     }
 
