@@ -2,7 +2,6 @@
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::collections::HashSet;
 
 // Bitflags for parsing strategies
 bitflags::bitflags! {
@@ -84,32 +83,23 @@ impl RegexPatterns {
 }
 
 // Elements that can be converted from DIV to P
-pub static DIV_TO_P_ELEMS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut set = HashSet::new();
-    set.insert("BLOCKQUOTE");
-    set.insert("DL");
-    set.insert("DIV");
-    set.insert("IMG");
-    set.insert("OL");
-    set.insert("P");
-    set.insert("PRE");
-    set.insert("TABLE");
-    set.insert("UL");
-    set
-});
+pub const DIV_TO_P_ELEMS: &[&str] = &[
+    "BLOCKQUOTE",
+    "DL",
+    "DIV",
+    "IMG",
+    "OL",
+    "P",
+    "PRE",
+    "TABLE",
+    "UL",
+];
 
 
 // Phrasing (inline) elements
-pub static PHRASING_ELEMS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut set = HashSet::new();
-    let elems = vec![
-        "ABBR", "AUDIO", "B", "BDO", "BR", "BUTTON", "CITE", "CODE", "DATA", "DATALIST", "DFN",
-        "EM", "EMBED", "I", "IMG", "INPUT", "KBD", "LABEL", "MARK", "MATH", "METER", "NOSCRIPT",
-        "OBJECT", "OUTPUT", "PROGRESS", "Q", "RUBY", "SAMP", "SCRIPT", "SELECT", "SMALL", "SPAN",
-        "STRONG", "SUB", "SUP", "TEXTAREA", "TIME", "VAR", "WBR",
-    ];
-    for elem in elems {
-        set.insert(elem);
-    }
-    set
-});
+pub const PHRASING_ELEMS: &[&str] = &[
+    "ABBR", "AUDIO", "B", "BDO", "BR", "BUTTON", "CITE", "CODE", "DATA", "DATALIST", "DFN",
+    "EM", "EMBED", "I", "IMG", "INPUT", "KBD", "LABEL", "MARK", "MATH", "METER", "NOSCRIPT",
+    "OBJECT", "OUTPUT", "PROGRESS", "Q", "RUBY", "SAMP", "SCRIPT", "SELECT", "SMALL", "SPAN",
+    "STRONG", "SUB", "SUP", "TEXTAREA", "TIME", "VAR", "WBR",
+];
