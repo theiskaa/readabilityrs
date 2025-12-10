@@ -120,7 +120,7 @@ Performance comparison against Mozilla's original Readability.js using identical
 - **Memory**: JavaScript's batch processing can hit OOM on large documents; Rust handles them consistently
 - **Batch processing**: Rust processes 10 documents (1.6MB total) in ~556ms vs JavaScript's ~2.3s (4x faster)
 
-> Benchmarks run on Apple Silicon. Run `./benchmark/run_benchmarks.sh` to reproduce.
+> Benchmarks run on Apple Silicon. Run `cargo run --release --example benchmark` or `./benchmark/run_benchmarks.sh` to reproduce.
 
 ## Test Compatibility
 

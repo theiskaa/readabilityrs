@@ -30,7 +30,7 @@ echo ""
 
 echo "Step 2: Running Rust benchmark..."
 cd "$PROJECT_DIR"
-cargo run --release --example rust_benchmark 2>/dev/null
+cargo run --release --example benchmark 2>/dev/null
 echo ""
 
 echo "Step 3: Running JavaScript benchmark..."
