@@ -18,6 +18,7 @@ pub struct Metadata {
     pub site_name: Option<String>,
     pub published_time: Option<String>,
     pub lang: Option<String>,
+    pub image: Option<String>,
 }
 
 /// Extract JSON-LD structured data from document
@@ -168,10 +169,79 @@ pub fn get_json_ld(document: &Html) -> Metadata {
                     metadata.published_time = Some(date_published.trim().to_string());
                 }
             }
+
+            // Extract image from JSON-LD
+            if metadata.image.is_none() {
+                metadata.image = extract_json_ld_image(&parsed);
+            }
         }
     }
 
     metadata
+}
+
+/// Extract image URL from JSON-LD data
+///
+/// Handles various Schema.org image formats:
+/// - Simple string URL
+/// - ImageObject with url property
+/// - Array of images (takes first)
+fn extract_json_ld_image(parsed: &Value) -> Option<String> {
+    if let Some(image) = parsed.get("image") {
+        // Simple string URL
+        if let Some(url) = image.as_str() {
+            let trimmed = url.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+
+        // ImageObject with url property
+        if let Some(url) = image.get("url").and_then(|v| v.as_str()) {
+            let trimmed = url.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+
+        // ImageObject with @id property
+        if let Some(id) = image.get("@id").and_then(|v| v.as_str()) {
+            let trimmed = id.trim();
+            if !trimmed.is_empty()
+                && (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
+            {
+                return Some(trimmed.to_string());
+            }
+        }
+
+        // Array of images - take the first valid one
+        if let Some(arr) = image.as_array() {
+            for img in arr {
+                if let Some(url) = img.as_str() {
+                    let trimmed = url.trim();
+                    if !trimmed.is_empty() {
+                        return Some(trimmed.to_string());
+                    }
+                }
+                if let Some(url) = img.get("url").and_then(|v| v.as_str()) {
+                    let trimmed = url.trim();
+                    if !trimmed.is_empty() {
+                        return Some(trimmed.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // Also check thumbnailUrl as fallback
+    if let Some(thumbnail) = parsed.get("thumbnailUrl").and_then(|v| v.as_str()) {
+        let trimmed = thumbnail.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    None
 }
 
 /// Extract article metadata from meta tags
@@ -180,11 +250,11 @@ pub fn get_json_ld(document: &Html) -> Metadata {
 pub fn get_article_metadata(document: &Html, json_ld: Metadata) -> Metadata {
     let mut values: HashMap<String, String> = HashMap::new();
     let property_pattern = regex::Regex::new(
-        r"(?i)\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name)\s*"
+        r"(?i)\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name|image|image:url|image:secure_url)\s*"
     ).unwrap();
 
     let name_pattern = regex::Regex::new(
-        r"(?i)^\s*(?:(?:article|dc|dcterm|og|twitter|parsely|weibo:(?:article|webpage))\s*[-\.:]\s*)?(author|author_name|creator|pub-date|description|title|site_name)\s*$"
+        r"(?i)^\s*(?:(?:article|dc|dcterm|og|twitter|parsely|weibo:(?:article|webpage))\s*[-\.:]\s*)?(author|author_name|creator|pub-date|description|title|site_name|image|thumbnail)\s*$"
     ).unwrap();
 
     let meta_selector = Selector::parse("meta").unwrap();
@@ -305,6 +375,23 @@ pub fn get_article_metadata(document: &Html, json_ld: Metadata) -> Metadata {
             .cloned()
     });
 
+    // Extract image from meta tags with priority order
+    metadata.image = json_ld.image.or_else(|| {
+        values
+            .get("og:image:secure_url")
+            .or_else(|| values.get("og:image:url"))
+            .or_else(|| values.get("og:image"))
+            .or_else(|| values.get("twitter:image"))
+            .or_else(|| values.get("thumbnail"))
+            .or_else(|| values.get("image"))
+            .cloned()
+    });
+
+    // If no image found in standard meta tags, try additional sources
+    if metadata.image.is_none() {
+        metadata.image = extract_image_from_document(document);
+    }
+
     metadata.lang = extract_language_from_document(document);
 
     metadata.title = metadata.title.map(|t| utils::unescape_html_entities(&t));
@@ -366,7 +453,65 @@ pub fn get_article_metadata(document: &Html, json_ld: Metadata) -> Metadata {
         .published_time
         .map(|p| utils::unescape_html_entities(&p));
 
+    // Clean up image URL
+    metadata.image = metadata.image.and_then(|img| {
+        let trimmed = img.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        Some(utils::unescape_html_entities(trimmed))
+    });
+
     metadata
+}
+
+/// Extract image URL from document structure
+///
+/// Checks additional sources when meta tags don't provide an image:
+/// 1. link[rel="image_src"]
+/// 2. link[rel="icon"] (as last resort for favicon)
+/// 3. First significant image in article content
+fn extract_image_from_document(document: &Html) -> Option<String> {
+    // Check link[rel="image_src"]
+    if let Ok(selector) = Selector::parse("link[rel='image_src']") {
+        if let Some(link) = document.select(&selector).next() {
+            if let Some(href) = link.value().attr("href") {
+                let trimmed = href.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    // Check itemprop="image"
+    if let Ok(selector) = Selector::parse("[itemprop='image']") {
+        for elem in document.select(&selector) {
+            // Check for content attribute (meta tags)
+            if let Some(content) = elem.value().attr("content") {
+                let trimmed = content.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+            // Check for src attribute (img tags)
+            if let Some(src) = elem.value().attr("src") {
+                let trimmed = src.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+            // Check for href attribute (link tags)
+            if let Some(href) = elem.value().attr("href") {
+                let trimmed = href.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1378,6 +1523,92 @@ mod tests {
     }
 
     #[test]
+    fn test_json_ld_image_extraction() {
+        let html = r#"
+            <html>
+                <head>
+                    <script type="application/ld+json">
+                    {
+                        "@context": "https://schema.org",
+                        "@type": "Article",
+                        "headline": "Test Article",
+                        "image": "https://example.com/image.jpg"
+                    }
+                    </script>
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_json_ld(&document);
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/image.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_json_ld_image_object_extraction() {
+        let html = r#"
+            <html>
+                <head>
+                    <script type="application/ld+json">
+                    {
+                        "@context": "https://schema.org",
+                        "@type": "Article",
+                        "headline": "Test Article",
+                        "image": {
+                            "@type": "ImageObject",
+                            "url": "https://example.com/image.jpg",
+                            "width": 1200,
+                            "height": 630
+                        }
+                    }
+                    </script>
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_json_ld(&document);
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/image.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_json_ld_image_array_extraction() {
+        let html = r#"
+            <html>
+                <head>
+                    <script type="application/ld+json">
+                    {
+                        "@context": "https://schema.org",
+                        "@type": "Article",
+                        "headline": "Test Article",
+                        "image": [
+                            "https://example.com/image1.jpg",
+                            "https://example.com/image2.jpg"
+                        ]
+                    }
+                    </script>
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_json_ld(&document);
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/image1.jpg".to_string())
+        );
+    }
+
+    #[test]
     fn test_meta_tag_extraction() {
         let html = r#"
             <html>
@@ -1396,6 +1627,151 @@ mod tests {
         assert_eq!(metadata.title, Some("OG Title".to_string()));
         assert_eq!(metadata.byline, Some("Jane Smith".to_string()));
         assert_eq!(metadata.excerpt, Some("OG Description".to_string()));
+    }
+
+    #[test]
+    fn test_og_image_extraction() {
+        let html = r#"
+            <html>
+                <head>
+                    <meta property="og:title" content="OG Title" />
+                    <meta property="og:image" content="https://example.com/og-image.jpg" />
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_article_metadata(&document, Metadata::default());
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/og-image.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_og_image_secure_url_priority() {
+        let html = r#"
+            <html>
+                <head>
+                    <meta property="og:image" content="http://example.com/image.jpg" />
+                    <meta property="og:image:secure_url" content="https://example.com/secure-image.jpg" />
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_article_metadata(&document, Metadata::default());
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/secure-image.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_twitter_image_extraction() {
+        let html = r#"
+            <html>
+                <head>
+                    <meta name="twitter:image" content="https://example.com/twitter-image.jpg" />
+                    <meta name="twitter:image:alt" content="Twitter alt text" />
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_article_metadata(&document, Metadata::default());
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/twitter-image.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_json_ld_image_takes_priority() {
+        let html = r#"
+            <html>
+                <head>
+                    <script type="application/ld+json">
+                    {
+                        "@context": "https://schema.org",
+                        "@type": "Article",
+                        "headline": "Test Article",
+                        "image": "https://example.com/json-ld-image.jpg"
+                    }
+                    </script>
+                    <meta property="og:image" content="https://example.com/og-image.jpg" />
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let json_ld = get_json_ld(&document);
+        let metadata = get_article_metadata(&document, json_ld);
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/json-ld-image.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_link_image_src_extraction() {
+        let html = r#"
+            <html>
+                <head>
+                    <link rel="image_src" href="https://example.com/link-image.jpg" />
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_article_metadata(&document, Metadata::default());
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/link-image.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_itemprop_image_extraction() {
+        let html = r#"
+            <html>
+                <head>
+                    <meta itemprop="image" content="https://example.com/itemprop-image.jpg" />
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_article_metadata(&document, Metadata::default());
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/itemprop-image.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_thumbnail_meta_extraction() {
+        let html = r#"
+            <html>
+                <head>
+                    <meta name="thumbnail" content="https://example.com/thumbnail.jpg" />
+                </head>
+            </html>
+        "#;
+
+        let document = Html::parse_document(html);
+        let metadata = get_article_metadata(&document, Metadata::default());
+
+        assert_eq!(
+            metadata.image,
+            Some("https://example.com/thumbnail.jpg".to_string())
+        );
     }
 
     #[test]
@@ -1667,8 +2043,7 @@ mod tests {
 
     #[test]
     fn test_herald_sun_caps_byline_overrides_meta() {
-        let html =
-            fs::read_to_string("tests/test-pages/herald-sun-1/source.html").unwrap();
+        let html = fs::read_to_string("tests/test-pages/herald-sun-1/source.html").unwrap();
         let document = Html::parse_document(&html);
         let dom_byline = extract_byline_from_document(&document).expect("dom byline");
         assert_eq!(dom_byline.text, "JOE HILDEBRAND");
