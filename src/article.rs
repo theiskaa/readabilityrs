@@ -106,6 +106,15 @@ pub struct Article {
     /// separated by commas.
     pub byline: Option<String>,
 
+    /// The image is extracted from various sources, checking JSON-LD structured data first
+    /// (supporting simple URLs, ImageObject with `url` property, and arrays of images).
+    /// If not found, Open Graph meta tags are checked in priority order: `og:image:secure_url`,
+    /// `og:image:url`, then `og:image`. Twitter card meta tags (`twitter:image`) and generic
+    /// `thumbnail` or `image` meta tags are examined next. Finally, elements with
+    /// `link[rel="image_src"]` or `itemprop="image"` attributes are checked as fallbacks.
+    /// The first valid URL encountered in this priority order is used.
+    pub image: Option<String>,
+
     /// Text direction hint: "ltr" (left-to-right), "rtl" (right-to-left), or "auto".
     ///
     /// Extracted from the `dir` attribute on the `<html>` element.

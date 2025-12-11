@@ -201,17 +201,18 @@ impl Readability {
                 let dir = crate::dom_utils::get_article_direction(&self.document);
 
                 Some(Article {
-                    title: self.metadata.title.clone(),
+                    title: self.metadata.title,
                     content: Some(cleaned_html),
                     raw_content: Some(content_html),
                     text_content: Some(text_content),
                     length,
                     excerpt,
-                    byline: self.metadata.byline.clone(),
+                    image: self.metadata.image,
+                    byline: self.metadata.byline,
                     dir,
-                    site_name: self.metadata.site_name.clone(),
-                    lang: self.metadata.lang.clone(),
-                    published_time: self.metadata.published_time.clone(),
+                    site_name: self.metadata.site_name,
+                    lang: self.metadata.lang,
+                    published_time: self.metadata.published_time,
                 })
             }
             Ok(None) => None,
