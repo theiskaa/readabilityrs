@@ -11,7 +11,7 @@ categories = ["parser-implementations", "web-programming"]
 readme = "README.md"
 
 [dependencies]
-scraper = "0.20"
+scraper = "0.25"
 kuchikikiki = "0.9"
 regex = "1.10"
 once_cell = "1.19"
