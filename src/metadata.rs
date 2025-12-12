@@ -250,7 +250,7 @@ fn extract_json_ld_image(parsed: &Value) -> Option<String> {
 pub fn get_article_metadata(document: &Html, json_ld: Metadata) -> Metadata {
     let mut values: HashMap<String, String> = HashMap::new();
     let property_pattern = regex::Regex::new(
-        r"(?i)\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name|image|image:url|image:secure_url)\s*"
+        r"(?i)\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name|image:url|image:secure_url|image$)\s*"
     ).unwrap();
 
     let name_pattern = regex::Regex::new(
