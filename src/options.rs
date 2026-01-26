@@ -144,6 +144,15 @@ pub struct ReadabilityOptions {
     ///
     /// Default: `0.0`
     pub link_density_modifier: f64,
+
+    /// Remove the title element from the extracted content.
+    ///
+    /// When `true`, removes the title heading (h1/h2) from the article content HTML
+    /// if it matches the extracted title. This is useful when you want to render
+    /// the title separately from the content for layout consistency.
+    ///
+    /// Default: `false`
+    pub remove_title_from_content: bool,
 }
 
 impl Default for ReadabilityOptions {
@@ -158,6 +167,7 @@ impl Default for ReadabilityOptions {
             disable_json_ld: false,
             allowed_video_regex: None,
             link_density_modifier: 0.0,
+            remove_title_from_content: false,
         }
     }
 }
@@ -196,6 +206,7 @@ pub struct ReadabilityOptionsBuilder {
     disable_json_ld: Option<bool>,
     allowed_video_regex: Option<Regex>,
     link_density_modifier: Option<f64>,
+    remove_title_from_content: Option<bool>,
 }
 
 impl ReadabilityOptionsBuilder {
@@ -253,6 +264,15 @@ impl ReadabilityOptionsBuilder {
         self
     }
 
+    /// Remove the title element from the extracted content
+    ///
+    /// When enabled, removes the title heading (h1/h2) from the article content
+    /// if it matches the extracted title. Useful for rendering the title separately.
+    pub fn remove_title_from_content(mut self, remove: bool) -> Self {
+        self.remove_title_from_content = Some(remove);
+        self
+    }
+
     /// Build the ReadabilityOptions
     pub fn build(self) -> ReadabilityOptions {
         let defaults = ReadabilityOptions::default();
@@ -272,6 +292,9 @@ impl ReadabilityOptionsBuilder {
             link_density_modifier: self
                 .link_density_modifier
                 .unwrap_or(defaults.link_density_modifier),
+            remove_title_from_content: self
+                .remove_title_from_content
+                .unwrap_or(defaults.remove_title_from_content),
         }
     }
 }
