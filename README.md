@@ -21,7 +21,7 @@ Or add to your Cargo.toml:
 
 ```toml
 [dependencies]
-readabilityrs = "0.1.0"
+readabilityrs = "0.1.1"
 ```
 
 ## Usage
