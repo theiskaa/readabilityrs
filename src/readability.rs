@@ -175,7 +175,11 @@ impl Readability {
                     cleaner::clean_article_content_light(&content_html, self.base_url.as_deref())
                         .unwrap_or_else(|_| content_html.clone());
 
-                let mut prepped_html = crate::post_processor::prep_article(&cleaned_wrapper_html);
+                let mut prepped_html = crate::post_processor::prep_article(
+                    &cleaned_wrapper_html,
+                    self.options.clean_styles,
+                    self.options.clean_whitespace,
+                );
 
                 // Remove title from content if the option is enabled
                 if self.options.remove_title_from_content {

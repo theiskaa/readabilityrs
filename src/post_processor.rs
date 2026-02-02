@@ -8,10 +8,11 @@ use regex::Regex;
 use scraper::{Html, Selector};
 
 /// Remove nav-heavy wrappers by descending into content-like children.
+/// Note: "widget" is excluded from this pattern since page builders use it for content.
 fn unwrap_nav_wrappers(html: &str) -> String {
     static WRAPPER_REGEX: Lazy<Regex> = Lazy::new(|| {
         Regex::new(
-            r#"(?is)<div[^>]+class="[^"]*(?:navbar|nav|menu|sidebar|widget|header)[^"]*"[^>]*>.*?</div>"#,
+            r#"(?is)<div[^>]+class="[^"]*(?:navbar|nav|menu|sidebar|header)[^"]*"[^>]*>.*?</div>"#,
         )
         .unwrap()
     });
@@ -176,25 +177,88 @@ fn titles_match(title1: &str, title2: &str) -> bool {
 /// Prepare extracted article content for final output
 ///
 /// This implements Mozilla's _prepArticle() pipeline using regex-based cleaning
-pub fn prep_article(html: &str) -> String {
+///
+/// # Arguments
+/// * `html` - The raw extracted article HTML
+/// * `clean_styles_opt` - Whether to remove inline styles (implements Mozilla's _cleanStyles)
+/// * `clean_whitespace_opt` - Whether to normalize whitespace and remove empty paragraphs
+pub fn prep_article(html: &str, clean_styles_opt: bool, clean_whitespace_opt: bool) -> String {
     let mut html = html.to_string();
 
     // Unwrap nav wrappers before removing elements
     html = unwrap_nav_wrappers(&html);
 
-    // Step 1: Remove unwanted elements
+    // Step 1: Clean inline styles (Mozilla's _cleanStyles)
+    // This removes style attributes that can make text invisible or unreadable
+    if clean_styles_opt {
+        html = clean_styles(&html);
+    }
+
+    // Step 2: Remove unwanted elements
     html = remove_unwanted_elements(&html);
 
-    // Step 2: Remove share buttons and social widgets
+    // Step 3: Remove share buttons and social widgets
     html = remove_share_elements(&html);
 
-    // Step 2b: Remove navigation lists/menus
+    // Step 3b: Remove navigation lists/menus
     html = remove_navigation_elements(&html);
 
-    // Step 3: Remove empty paragraphs
-    html = remove_empty_paragraphs(&html);
+    // Step 4: Remove empty paragraphs and clean up whitespace
+    if clean_whitespace_opt {
+        html = remove_empty_paragraphs(&html);
+        // Step 5: Clean up excessive whitespace and empty lines
+        html = normalize_whitespace(&html);
+    }
 
     html
+}
+
+/// Clean inline styles from HTML elements
+///
+/// This implements Mozilla's _cleanStyles() function which removes the `style`
+/// attribute and other presentational attributes that can interfere with
+/// readability (e.g., `color: white` making text invisible on white backgrounds).
+///
+/// Presentational attributes removed: style, align, background, bgcolor, border,
+/// cellpadding, cellspacing, frame, hspace, rules, valign, vspace
+fn clean_styles(html: &str) -> String {
+    // Simple and fast: just remove style attributes with pre-compiled regexes
+    static STYLE_DOUBLE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r#"(?i)\s+style\s*=\s*"[^"]*""#).unwrap());
+    static STYLE_SINGLE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r#"(?i)\s+style\s*=\s*'[^']*'"#).unwrap());
+    static ALIGN: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r#"(?i)\s+align\s*=\s*["'][^"']*["']"#).unwrap());
+    static BGCOLOR: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r#"(?i)\s+bgcolor\s*=\s*["'][^"']*["']"#).unwrap());
+    static VALIGN: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r#"(?i)\s+valign\s*=\s*["'][^"']*["']"#).unwrap());
+
+    let mut result = html.to_string();
+    result = STYLE_DOUBLE.replace_all(&result, "").to_string();
+    result = STYLE_SINGLE.replace_all(&result, "").to_string();
+    result = ALIGN.replace_all(&result, "").to_string();
+    result = BGCOLOR.replace_all(&result, "").to_string();
+    result = VALIGN.replace_all(&result, "").to_string();
+    result
+}
+
+/// Normalize whitespace in the HTML output
+///
+/// This function:
+/// - Removes excessive blank lines (more than 2 consecutive newlines)
+/// - Collapses multiple spaces into single spaces
+fn normalize_whitespace(html: &str) -> String {
+    // Multiple consecutive newlines -> 2 newlines (fast single pass)
+    static MULTI_NEWLINE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
+    // Multiple spaces -> single space
+    static MULTI_SPACE: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r" {2,}").unwrap());
+
+    let result = MULTI_NEWLINE.replace_all(html, "\n\n");
+    let result = MULTI_SPACE.replace_all(&result, " ");
+    result.to_string()
 }
 
 /// Remove unwanted elements that are never part of article content
@@ -287,16 +351,37 @@ fn remove_navigation_elements(html: &str) -> String {
 
 /// Remove empty paragraphs (paragraphs with no text and no media elements)
 fn remove_empty_paragraphs(html: &str) -> String {
-    static EMPTY_P_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"<p[^>]*?>\s*</p>").unwrap());
+    // Match empty paragraphs - with no content or only whitespace/br tags
+    static EMPTY_P_REGEX: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?i)<p[^>]*>(\s*(<br\s*/?>)?\s*)*</p>").unwrap());
+
+    // Match paragraphs that contain only <span></span> or similar empty inline elements
+    static EMPTY_SPAN_P_REGEX: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?i)<p[^>]*>\s*<span[^>]*>\s*</span>\s*</p>").unwrap());
+
+    // Match paragraphs that contain only <span><br></span> (common in Blogger)
+    static BR_SPAN_P_REGEX: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?i)<p[^>]*>\s*<span[^>]*>\s*<br\s*/?>\s*</span>\s*</p>").unwrap());
+
+    // Match orphaned <br> tags between block elements (not inside paragraphs)
+    static ORPHAN_BR_REGEX: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?i)(</(?:p|div|h[1-6])>)\s*(?:<br\s*/?>[\s\n]*)+\s*(<(?:p|div|h[1-6]))").unwrap());
 
     let mut html = html.to_string();
-    loop {
-        let new_html = EMPTY_P_REGEX.replace_all(&html, "").to_string();
-        if new_html == html {
+
+    // Remove empty paragraphs (iterate to handle nested cases)
+    for _ in 0..5 {
+        let prev = html.clone();
+        html = EMPTY_P_REGEX.replace_all(&html, "").to_string();
+        html = EMPTY_SPAN_P_REGEX.replace_all(&html, "").to_string();
+        html = BR_SPAN_P_REGEX.replace_all(&html, "").to_string();
+        if html == prev {
             break;
         }
-        html = new_html;
     }
+
+    // Remove orphaned <br> tags between block elements
+    html = ORPHAN_BR_REGEX.replace_all(&html, "$1\n$2").to_string();
 
     html
 }
@@ -400,7 +485,7 @@ mod tests {
             </article>
         "#;
 
-        let cleaned = prep_article(html);
+        let cleaned = prep_article(html, true, true);
 
         assert!(cleaned.contains("<h1>Article Title</h1>"));
         assert!(cleaned.contains("<p>First paragraph</p>"));

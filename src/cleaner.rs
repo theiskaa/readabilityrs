@@ -52,7 +52,11 @@ fn remove_nav_like_sections(html: &str) -> String {
     let mut result = NAV_REGEX.replace_all(html, "").to_string();
 
     let tags = ["div", "section", "ul", "ol"];
-    let keywords = ["nav", "navbar", "menu", "breadcrumbs", "sidebar", "widget"];
+    // Note: "widget" is intentionally excluded from this regex-based removal because
+    // page builders (Elementor, Divi, etc.) use "widget" in class names for ALL content
+    // containers. Widgets with negative class weight are handled by should_remove_dom_node
+    // which also considers content quality (link density, text length).
+    let keywords = ["nav", "navbar", "menu", "breadcrumbs", "sidebar"];
 
     for tag in tags {
         for keyword in keywords {
@@ -131,6 +135,15 @@ fn clean_conditionally_tag(root: &NodeRef, tag: &str) {
 }
 
 fn should_remove_dom_node(node: &NodeRef, tag: &str) -> bool {
+    // Check for comment-related patterns FIRST - these should always be removed as they're
+    // user-generated content, not article content. This check must happen before the
+    // content length check, as comment sections can be very large.
+    // This matches Mozilla's behavior where "comment" in unlikelyCandidates causes early removal.
+    let class_id = get_dom_class_id_string(node);
+    if is_comment_section(&class_id) {
+        return true;
+    }
+
     let trimmed = node.text_contents().trim().to_string();
     if trimmed.len() > 600 {
         return false;
@@ -168,8 +181,15 @@ fn should_remove_dom_node(node: &NodeRef, tag: &str) -> bool {
         return false;
     }
 
+    let content_length = trimmed.len();
+    let link_density = dom_link_density(node, content_length);
+
     let weight = get_dom_class_weight(node);
-    if weight < 0 {
+    // Don't remove based solely on negative class weight. Also require high link density
+    // or very short content. This prevents removing legitimate content in page builders
+    // (like Elementor, Divi, etc.) that use generic class names like "widget" for
+    // content containers, not just sidebar widgets.
+    if weight < 0 && (link_density > 0.25 || content_length < 100) {
         return true;
     }
 
@@ -197,9 +217,6 @@ fn should_remove_dom_node(node: &NodeRef, tag: &str) -> bool {
     if REGEXPS.ad_words.is_match(trimmed.trim()) || REGEXPS.loading_words.is_match(trimmed.trim()) {
         return true;
     }
-
-    let content_length = trimmed.len();
-    let link_density = dom_link_density(node, content_length);
     let text_density = get_text_density(node, &build_textish_tags());
     let is_figure_child = has_ancestor(node, |ancestor| node_has_tag(ancestor, "figure"));
 
@@ -495,6 +512,30 @@ fn get_dom_class_weight(node: &NodeRef) -> i32 {
     weight
 }
 
+/// Get combined class and id string from a DOM node for pattern matching.
+fn get_dom_class_id_string(node: &NodeRef) -> String {
+    if let Some(element) = node.as_element() {
+        let attrs = element.attributes.borrow();
+        let class = attrs.get("class").unwrap_or("");
+        let id = attrs.get("id").unwrap_or("");
+        format!("{} {}", class, id).to_lowercase()
+    } else {
+        String::new()
+    }
+}
+
+/// Regex for comment-related patterns that should always be removed.
+/// These are user-generated content sections, not article content.
+/// Matches Mozilla Readability's unlikelyCandidates for comments.
+static COMMENT_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)comment|disqus|remark|replies|respond").unwrap()
+});
+
+/// Check if a class/id string indicates a comment section.
+fn is_comment_section(class_id: &str) -> bool {
+    COMMENT_REGEX.is_match(class_id)
+}
+
 fn remove_conditionally_regex(html: &str) -> String {
     let mut result = html.to_string();
     let cleanup_tags = ["table", "ul", "ol", "div", "section"];
@@ -551,10 +592,11 @@ fn should_remove_block(fragment: &str, tag: &str) -> bool {
 
     if !stats.class_id.is_empty() {
         let class_id = stats.class_id.as_str();
+        // Note: "widget" is excluded here since page builders use it for content containers.
+        // Widgets are handled by should_remove_dom_node with content quality checks.
         if (class_id.contains("nav")
             || class_id.contains("menu")
             || class_id.contains("sidebar")
-            || class_id.contains("widget")
             || class_id.contains("related")
             || class_id.contains("sponsored"))
             && (stats.link_density > 0.1

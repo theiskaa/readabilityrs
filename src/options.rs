@@ -153,6 +153,25 @@ pub struct ReadabilityOptions {
     ///
     /// Default: `false`
     pub remove_title_from_content: bool,
+
+    /// Remove inline styles from the extracted content.
+    ///
+    /// When `true`, removes the `style` attribute and other presentational attributes
+    /// (align, bgcolor, etc.) from HTML elements. This implements Mozilla Readability's
+    /// `_cleanStyles` function and prevents issues like invisible text (e.g., `color: white`
+    /// on white backgrounds) or unwanted formatting.
+    ///
+    /// Default: `true`
+    pub clean_styles: bool,
+
+    /// Normalize whitespace in the extracted content.
+    ///
+    /// When `true`, removes excessive blank lines, empty paragraphs, and normalizes
+    /// whitespace. This helps produce cleaner output, especially for articles from
+    /// blogs and CMSs that generate verbose HTML.
+    ///
+    /// Default: `true`
+    pub clean_whitespace: bool,
 }
 
 impl Default for ReadabilityOptions {
@@ -168,6 +187,8 @@ impl Default for ReadabilityOptions {
             allowed_video_regex: None,
             link_density_modifier: 0.0,
             remove_title_from_content: false,
+            clean_styles: true,
+            clean_whitespace: true,
         }
     }
 }
@@ -207,6 +228,8 @@ pub struct ReadabilityOptionsBuilder {
     allowed_video_regex: Option<Regex>,
     link_density_modifier: Option<f64>,
     remove_title_from_content: Option<bool>,
+    clean_styles: Option<bool>,
+    clean_whitespace: Option<bool>,
 }
 
 impl ReadabilityOptionsBuilder {
@@ -273,6 +296,24 @@ impl ReadabilityOptionsBuilder {
         self
     }
 
+    /// Enable or disable inline style cleaning
+    ///
+    /// When enabled, removes the `style` attribute and other presentational attributes
+    /// from HTML elements. This implements Mozilla Readability's `_cleanStyles` function.
+    pub fn clean_styles(mut self, clean: bool) -> Self {
+        self.clean_styles = Some(clean);
+        self
+    }
+
+    /// Enable or disable whitespace normalization
+    ///
+    /// When enabled, removes excessive blank lines, empty paragraphs, and normalizes
+    /// whitespace in the output.
+    pub fn clean_whitespace(mut self, clean: bool) -> Self {
+        self.clean_whitespace = Some(clean);
+        self
+    }
+
     /// Build the ReadabilityOptions
     pub fn build(self) -> ReadabilityOptions {
         let defaults = ReadabilityOptions::default();
@@ -295,6 +336,8 @@ impl ReadabilityOptionsBuilder {
             remove_title_from_content: self
                 .remove_title_from_content
                 .unwrap_or(defaults.remove_title_from_content),
+            clean_styles: self.clean_styles.unwrap_or(defaults.clean_styles),
+            clean_whitespace: self.clean_whitespace.unwrap_or(defaults.clean_whitespace),
         }
     }
 }
