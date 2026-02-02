@@ -52,7 +52,11 @@ fn remove_nav_like_sections(html: &str) -> String {
     let mut result = NAV_REGEX.replace_all(html, "").to_string();
 
     let tags = ["div", "section", "ul", "ol"];
-    let keywords = ["nav", "navbar", "menu", "breadcrumbs", "sidebar", "widget"];
+    // Note: "widget" is intentionally excluded from this regex-based removal because
+    // page builders (Elementor, Divi, etc.) use "widget" in class names for ALL content
+    // containers. Widgets with negative class weight are handled by should_remove_dom_node
+    // which also considers content quality (link density, text length).
+    let keywords = ["nav", "navbar", "menu", "breadcrumbs", "sidebar"];
 
     for tag in tags {
         for keyword in keywords {
@@ -168,8 +172,15 @@ fn should_remove_dom_node(node: &NodeRef, tag: &str) -> bool {
         return false;
     }
 
+    let content_length = trimmed.len();
+    let link_density = dom_link_density(node, content_length);
+
     let weight = get_dom_class_weight(node);
-    if weight < 0 {
+    // Don't remove based solely on negative class weight. Also require high link density
+    // or very short content. This prevents removing legitimate content in page builders
+    // (like Elementor, Divi, etc.) that use generic class names like "widget" for
+    // content containers, not just sidebar widgets.
+    if weight < 0 && (link_density > 0.25 || content_length < 100) {
         return true;
     }
 
@@ -197,9 +208,6 @@ fn should_remove_dom_node(node: &NodeRef, tag: &str) -> bool {
     if REGEXPS.ad_words.is_match(trimmed.trim()) || REGEXPS.loading_words.is_match(trimmed.trim()) {
         return true;
     }
-
-    let content_length = trimmed.len();
-    let link_density = dom_link_density(node, content_length);
     let text_density = get_text_density(node, &build_textish_tags());
     let is_figure_child = has_ancestor(node, |ancestor| node_has_tag(ancestor, "figure"));
 
@@ -551,10 +559,11 @@ fn should_remove_block(fragment: &str, tag: &str) -> bool {
 
     if !stats.class_id.is_empty() {
         let class_id = stats.class_id.as_str();
+        // Note: "widget" is excluded here since page builders use it for content containers.
+        // Widgets are handled by should_remove_dom_node with content quality checks.
         if (class_id.contains("nav")
             || class_id.contains("menu")
             || class_id.contains("sidebar")
-            || class_id.contains("widget")
             || class_id.contains("related")
             || class_id.contains("sponsored"))
             && (stats.link_density > 0.1
