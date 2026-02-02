@@ -8,10 +8,11 @@ use regex::Regex;
 use scraper::{Html, Selector};
 
 /// Remove nav-heavy wrappers by descending into content-like children.
+/// Note: "widget" is excluded from this pattern since page builders use it for content.
 fn unwrap_nav_wrappers(html: &str) -> String {
     static WRAPPER_REGEX: Lazy<Regex> = Lazy::new(|| {
         Regex::new(
-            r#"(?is)<div[^>]+class="[^"]*(?:navbar|nav|menu|sidebar|widget|header)[^"]*"[^>]*>.*?</div>"#,
+            r#"(?is)<div[^>]+class="[^"]*(?:navbar|nav|menu|sidebar|header)[^"]*"[^>]*>.*?</div>"#,
         )
         .unwrap()
     });
