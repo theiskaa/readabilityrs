@@ -135,6 +135,15 @@ fn clean_conditionally_tag(root: &NodeRef, tag: &str) {
 }
 
 fn should_remove_dom_node(node: &NodeRef, tag: &str) -> bool {
+    // Check for comment-related patterns FIRST - these should always be removed as they're
+    // user-generated content, not article content. This check must happen before the
+    // content length check, as comment sections can be very large.
+    // This matches Mozilla's behavior where "comment" in unlikelyCandidates causes early removal.
+    let class_id = get_dom_class_id_string(node);
+    if is_comment_section(&class_id) {
+        return true;
+    }
+
     let trimmed = node.text_contents().trim().to_string();
     if trimmed.len() > 600 {
         return false;
@@ -501,6 +510,30 @@ fn get_dom_class_weight(node: &NodeRef) -> i32 {
         }
     }
     weight
+}
+
+/// Get combined class and id string from a DOM node for pattern matching.
+fn get_dom_class_id_string(node: &NodeRef) -> String {
+    if let Some(element) = node.as_element() {
+        let attrs = element.attributes.borrow();
+        let class = attrs.get("class").unwrap_or("");
+        let id = attrs.get("id").unwrap_or("");
+        format!("{} {}", class, id).to_lowercase()
+    } else {
+        String::new()
+    }
+}
+
+/// Regex for comment-related patterns that should always be removed.
+/// These are user-generated content sections, not article content.
+/// Matches Mozilla Readability's unlikelyCandidates for comments.
+static COMMENT_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)comment|disqus|remark|replies|respond").unwrap()
+});
+
+/// Check if a class/id string indicates a comment section.
+fn is_comment_section(class_id: &str) -> bool {
+    COMMENT_REGEX.is_match(class_id)
 }
 
 fn remove_conditionally_regex(html: &str) -> String {
