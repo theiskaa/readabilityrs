@@ -14,6 +14,7 @@
 //! ## Key Features
 //!
 //! - **Content Extraction**: Intelligently identifies and extracts main article content
+//! - **Markdown Output**: Optional HTML-to-Markdown conversion with content standardization
 //! - **Metadata Extraction**: Extracts title, author, description, site name, language, and publish date
 //! - **JSON-LD Support**: Parses structured data from JSON-LD markup
 //! - **Multiple Retry Strategies**: Uses adaptive algorithms to handle various page layouts
