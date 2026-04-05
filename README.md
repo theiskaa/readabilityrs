@@ -20,7 +20,7 @@ Or add to your Cargo.toml:
 
 ```toml
 [dependencies]
-readabilityrs = "0.1.2"
+readabilityrs = "0.1.3"
 ```
 
 ## Usage
