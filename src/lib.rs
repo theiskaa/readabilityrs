@@ -116,7 +116,9 @@ mod cleaner;
 mod constants;
 mod content_extractor;
 mod dom_utils;
+pub mod elements;
 mod error;
+pub mod markdown;
 mod metadata;
 mod options;
 mod post_processor;
@@ -128,6 +130,7 @@ mod utils;
 // Public exports
 pub use article::Article;
 pub use error::{ReadabilityError, Result};
+pub use markdown::MarkdownOptions;
 pub use options::ReadabilityOptions;
 pub use readability::Readability;
 pub use readerable::{is_probably_readerable, ReaderableOptions};

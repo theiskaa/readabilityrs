@@ -212,6 +212,23 @@ impl Readability {
                 // Extract text direction from document
                 let dir = crate::dom_utils::get_article_direction(&self.document);
 
+                // Optionally produce markdown output
+                let markdown_content = if self.options.output_markdown {
+                    let md_opts = self
+                        .options
+                        .markdown_options
+                        .as_ref()
+                        .cloned()
+                        .unwrap_or_default();
+                    let standardized = crate::elements::standardize_all(
+                        &cleaned_html,
+                        self.metadata.title.as_deref(),
+                    );
+                    Some(crate::markdown::html_to_markdown(&standardized, &md_opts))
+                } else {
+                    None
+                };
+
                 Some(Article {
                     title: self.metadata.title,
                     content: Some(cleaned_html),
@@ -225,6 +242,7 @@ impl Readability {
                     site_name: self.metadata.site_name,
                     lang: self.metadata.lang,
                     published_time: self.metadata.published_time,
+                    markdown_content,
                 })
             }
             Ok(None) => None,

@@ -144,6 +144,13 @@ pub struct Article {
     /// This is the extracted content before the final cleaning steps,
     /// useful for debugging or custom post-processing.
     pub raw_content: Option<String>,
+
+    /// Markdown content of the article.
+    ///
+    /// Only populated when `ReadabilityOptions::output_markdown` is `true`.
+    /// Contains the article content converted to Markdown format after
+    /// the HTML has been cleaned and standardized.
+    pub markdown_content: Option<String>,
 }
 
 impl Article {
