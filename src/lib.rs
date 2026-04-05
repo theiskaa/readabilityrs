@@ -14,6 +14,7 @@
 //! ## Key Features
 //!
 //! - **Content Extraction**: Intelligently identifies and extracts main article content
+//! - **Markdown Output**: Optional HTML-to-Markdown conversion with content standardization
 //! - **Metadata Extraction**: Extracts title, author, description, site name, language, and publish date
 //! - **JSON-LD Support**: Parses structured data from JSON-LD markup
 //! - **Multiple Retry Strategies**: Uses adaptive algorithms to handle various page layouts
@@ -116,7 +117,9 @@ mod cleaner;
 mod constants;
 mod content_extractor;
 mod dom_utils;
+pub mod elements;
 mod error;
+pub mod markdown;
 mod metadata;
 mod options;
 mod post_processor;
@@ -128,6 +131,7 @@ mod utils;
 // Public exports
 pub use article::Article;
 pub use error::{ReadabilityError, Result};
+pub use markdown::MarkdownOptions;
 pub use options::ReadabilityOptions;
 pub use readability::Readability;
 pub use readerable::{is_probably_readerable, ReaderableOptions};

@@ -4,7 +4,6 @@
 [![Documentation](https://img.shields.io/docsrs/readabilityrs)](https://docs.rs/readabilityrs)
 [![License](https://img.shields.io/crates/l/readabilityrs)](LICENSE)
 [![Downloads](https://img.shields.io/crates/d/readabilityrs)](https://crates.io/crates/readabilityrs)
-[![GitHub Stars](https://img.shields.io/github/stars/theiskaa/readabilityrs)](https://github.com/theiskaa/readabilityrs/stargazers)
 
 readabilityrs extracts article content from HTML web pages using Mozilla's Readability algorithm. The library identifies and isolates the main article text while removing navigation, advertisements, and other clutter.
 
@@ -55,6 +54,14 @@ The library uses Mozilla's content scoring algorithm to identify the main articl
 
 ## Metadata Extraction
 Metadata is extracted from JSON-LD, OpenGraph, Twitter Cards, Dublin Core, and standard meta tags in that priority order. The library detects authors through rel="author" links and common byline patterns, extracts clean titles by removing site names, and generates excerpts from the first substantial paragraph.
+
+## Markdown Output
+
+The library supports optional Markdown output alongside the default cleaned HTML. When enabled via `output_markdown(true)` on the options builder, the parsed `Article` includes a `markdown_content` field containing the article as Markdown. The HTML content remains available as usual — Markdown is an addition, not a replacement.
+
+Before conversion, a content standardization pipeline runs over the cleaned HTML to normalize vendor-specific patterns into canonical forms. This covers syntax-highlighted code blocks from various libraries (Prism, Shiki, rehype, WordPress SyntaxHighlighter, GitHub), lazy-loaded images, permalink anchors in headings, footnote formats from different CMSs, and rendered math from MathJax and KaTeX. The converter then walks the normalized DOM and produces Markdown with configurable formatting — heading style, bullet character, code fence character, emphasis delimiters, and inline vs. reference link style are all adjustable through `MarkdownOptions`.
+
+The Markdown module can also be used standalone without the readability extraction, by calling `elements::standardize_all` and `markdown::html_to_markdown` directly on any HTML string.
 
 ## Configuration
 Configure parsing behavior through `ReadabilityOptions` using the builder pattern. Options include debug logging, character thresholds, candidate selection, class preservation, and link density scoring.

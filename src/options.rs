@@ -23,6 +23,7 @@
 //! let readability = Readability::new(html, None, Some(options)).unwrap();
 //! ```
 
+use crate::markdown::MarkdownOptions;
 use regex::Regex;
 
 /// Configuration options for the Readability parser.
@@ -172,6 +173,23 @@ pub struct ReadabilityOptions {
     ///
     /// Default: `true`
     pub clean_whitespace: bool,
+
+    /// Enable markdown output.
+    ///
+    /// When `true`, the parser will also produce a markdown version of the article
+    /// content in `Article::markdown_content`. The HTML content standardization
+    /// pipeline runs before conversion to normalize vendor-specific HTML.
+    ///
+    /// Default: `false`
+    pub output_markdown: bool,
+
+    /// Options for markdown output formatting.
+    ///
+    /// Only used when `output_markdown` is `true`. Controls heading style,
+    /// bullet character, code fence style, and other markdown formatting details.
+    ///
+    /// Default: `None` (uses `MarkdownOptions::default()`)
+    pub markdown_options: Option<MarkdownOptions>,
 }
 
 impl Default for ReadabilityOptions {
@@ -189,6 +207,8 @@ impl Default for ReadabilityOptions {
             remove_title_from_content: false,
             clean_styles: true,
             clean_whitespace: true,
+            output_markdown: false,
+            markdown_options: None,
         }
     }
 }
@@ -230,6 +250,8 @@ pub struct ReadabilityOptionsBuilder {
     remove_title_from_content: Option<bool>,
     clean_styles: Option<bool>,
     clean_whitespace: Option<bool>,
+    output_markdown: Option<bool>,
+    markdown_options: Option<MarkdownOptions>,
 }
 
 impl ReadabilityOptionsBuilder {
@@ -314,6 +336,24 @@ impl ReadabilityOptionsBuilder {
         self
     }
 
+    /// Enable or disable markdown output
+    ///
+    /// When enabled, the parser produces a markdown version of the article in
+    /// `Article::markdown_content`.
+    pub fn output_markdown(mut self, enabled: bool) -> Self {
+        self.output_markdown = Some(enabled);
+        self
+    }
+
+    /// Set markdown formatting options
+    ///
+    /// Controls heading style, bullet character, code fence style, and other
+    /// markdown formatting details. Only used when `output_markdown` is `true`.
+    pub fn markdown_options(mut self, opts: MarkdownOptions) -> Self {
+        self.markdown_options = Some(opts);
+        self
+    }
+
     /// Build the ReadabilityOptions
     pub fn build(self) -> ReadabilityOptions {
         let defaults = ReadabilityOptions::default();
@@ -338,6 +378,8 @@ impl ReadabilityOptionsBuilder {
                 .unwrap_or(defaults.remove_title_from_content),
             clean_styles: self.clean_styles.unwrap_or(defaults.clean_styles),
             clean_whitespace: self.clean_whitespace.unwrap_or(defaults.clean_whitespace),
+            output_markdown: self.output_markdown.unwrap_or(defaults.output_markdown),
+            markdown_options: self.markdown_options.or(defaults.markdown_options),
         }
     }
 }
