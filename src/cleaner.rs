@@ -1,11 +1,12 @@
 //! Content cleaning and post-processing functions.
 
-use crate::constants::{DIV_TO_P_ELEMS, REGEXPS};
+use crate::constants::REGEXPS;
 use crate::error::Result;
-use kuchikikiki::{traits::*, NodeData, NodeRef};
+use ego_tree::NodeId;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
-use scraper::{ElementRef, Html, Selector};
+use scraper::{ElementRef, Html, Node as ScraperNode, Selector};
+use std::collections::HashSet;
 
 /// Clean and post-process extracted article content (light version)
 ///
@@ -82,446 +83,25 @@ fn remove_conditionally(html: &str) -> String {
 }
 
 fn remove_conditionally_dom(html: &str) -> Option<String> {
-    let document = kuchikikiki::parse_html().one(html);
-    let body_node = document
-        .select("body")
-        .ok()
-        .and_then(|mut iter| iter.next())
-        .map(|node| node.as_node().clone());
+    let mut doc = Html::parse_document(html);
 
-    let (target_node, children_only) = if let Some(body) = body_node.clone() {
-        (body, true)
+    let body_id = doc.select(&BODY_SELECTOR).next().map(|e| e.id());
+    let root_id = body_id.unwrap_or_else(|| doc.tree.root().id());
+
+    let root_el = ElementRef::wrap(doc.tree.get(root_id)?)?;
+    let marks = mark_data_tables(root_el);
+
+    for tag in ["form", "fieldset", "table", "ul", "ol", "div", "section"] {
+        clean_conditionally_tag(&mut doc, root_id, tag, &marks);
+    }
+
+    let serialized = if body_id.is_some() {
+        let body_el = ElementRef::wrap(doc.tree.get(root_id)?)?;
+        body_el.inner_html()
     } else {
-        (document.clone(), false)
+        doc.html()
     };
-    mark_data_tables(&target_node);
-
-    let cleanup_tags = ["form", "fieldset", "table", "ul", "ol", "div", "section"];
-    for tag in cleanup_tags {
-        clean_conditionally_tag(&target_node, tag);
-    }
-
-    Some(serialize_node(&target_node, children_only))
-}
-
-fn serialize_node(node: &NodeRef, children_only: bool) -> String {
-    let mut buffer = Vec::new();
-
-    if children_only {
-        let children: Vec<_> = node.children().collect();
-        for child in children {
-            if child.serialize(&mut buffer).is_err() {
-                return node.text_contents();
-            }
-        }
-    } else if node.serialize(&mut buffer).is_err() {
-        return node.text_contents();
-    }
-
-    String::from_utf8(buffer).unwrap_or_else(|_| node.text_contents())
-}
-
-fn clean_conditionally_tag(root: &NodeRef, tag: &str) {
-    if let Ok(matches) = root.select(tag) {
-        let nodes: Vec<_> = matches
-            .map(|css_match| css_match.as_node().clone())
-            .collect();
-        for node in nodes {
-            if should_remove_dom_node(&node, tag) {
-                node.detach();
-            }
-        }
-    }
-}
-
-fn should_remove_dom_node(node: &NodeRef, tag: &str) -> bool {
-    // Check for comment-related patterns FIRST - these should always be removed as they're
-    // user-generated content, not article content. This check must happen before the
-    // content length check, as comment sections can be very large.
-    // This matches Mozilla's behavior where "comment" in unlikelyCandidates causes early removal.
-    let class_id = get_dom_class_id_string(node);
-    if is_comment_section(&class_id) {
-        return true;
-    }
-
-    let trimmed = node.text_contents().trim().to_string();
-    if trimmed.len() > 600 {
-        return false;
-    }
-
-    let mut is_list = tag.eq_ignore_ascii_case("ul") || tag.eq_ignore_ascii_case("ol");
-    if !is_list {
-        let node_text_len = trimmed.len().max(1);
-        let list_text_len = node
-            .select("ul, ol")
-            .ok()
-            .map(|iter| {
-                iter.map(|n| dom_inner_text(&n.as_node().clone()).len())
-                    .sum::<usize>()
-            })
-            .unwrap_or(0);
-        is_list = (list_text_len as f64 / node_text_len as f64) > 0.9;
-    }
-
-    if tag.eq_ignore_ascii_case("table") && is_data_table(node) {
-        return false;
-    }
-
-    if has_ancestor(node, |ancestor| {
-        is_table(ancestor) && is_data_table(ancestor)
-    }) {
-        return false;
-    }
-
-    if has_ancestor(node, |ancestor| node_has_tag(ancestor, "code")) {
-        return false;
-    }
-
-    if node_contains_data_table(node) {
-        return false;
-    }
-
-    let content_length = trimmed.len();
-    let link_density = dom_link_density(node, content_length);
-
-    let weight = get_dom_class_weight(node);
-    // Don't remove based solely on negative class weight. Also require high link density
-    // or very short content. This prevents removing legitimate content in page builders
-    // (like Elementor, Divi, etc.) that use generic class names like "widget" for
-    // content containers, not just sidebar widgets.
-    if weight < 0 && (link_density > 0.25 || content_length < 100) {
-        return true;
-    }
-
-    if trimmed.matches(',').count() >= 10 {
-        return false;
-    }
-
-    let p = count_descendants(node, "p");
-    let img = count_descendants(node, "img");
-    let li = count_descendants(node, "li").saturating_sub(100);
-    let input = count_descendants(node, "input");
-    let heading_density = get_text_density(node, &["h1", "h2", "h3", "h4", "h5", "h6"]);
-
-    let mut embed_count = 0;
-    if let Ok(embeds) = node.select("object, embed, iframe") {
-        for embed in embeds {
-            let embed_node = embed.as_node();
-            if node_has_allowed_video(embed_node) {
-                return false;
-            }
-            embed_count += 1;
-        }
-    }
-
-    if REGEXPS.ad_words.is_match(trimmed.trim()) || REGEXPS.loading_words.is_match(trimmed.trim()) {
-        return true;
-    }
-    let text_density = get_text_density(node, &build_textish_tags());
-    let is_figure_child = has_ancestor(node, |ancestor| node_has_tag(ancestor, "figure"));
-
-    let comma_count = trimmed.matches(',').count();
-
-    if comma_count >= 10 {
-        return false;
-    }
-
-    let mut should_remove = false;
-    if !is_figure_child && img > 1 && p > 0 && (p as f64 / img as f64) < 0.5 {
-        should_remove = true;
-    }
-    if !is_list && li > p {
-        should_remove = true;
-    }
-    if input > p.saturating_div(3) {
-        should_remove = true;
-    }
-    if !is_list
-        && !is_figure_child
-        && heading_density < 0.9
-        && content_length < 25
-        && link_density > 0.0
-    {
-        should_remove = true;
-    }
-    if !is_list && weight < 25 && link_density > 0.2 {
-        should_remove = true;
-    }
-    if weight >= 25 && link_density > 0.5 {
-        should_remove = true;
-    }
-    if (embed_count == 1 && content_length < 75) || embed_count > 1 {
-        should_remove = true;
-    }
-    if img == 0 && text_density == 0.0 {
-        should_remove = true;
-    }
-
-    if is_list && should_remove {
-        let simple_children = node.children().all(|child| {
-            if child.as_element().is_none() {
-                return true;
-            }
-            child
-                .children()
-                .filter(|n| n.as_element().is_some())
-                .count()
-                <= 1
-        });
-        if simple_children {
-            let li_count = count_descendants(node, "li");
-            if li_count > 0 && img == li_count {
-                should_remove = false;
-            }
-        }
-    }
-
-    should_remove
-}
-
-fn dom_link_density(node: &NodeRef, text_len: usize) -> f64 {
-    if text_len == 0 {
-        return 1.0;
-    }
-
-    if let Ok(links) = node.select("a") {
-        let mut link_length = 0;
-        for link in links {
-            link_length += link.as_node().text_contents().len();
-        }
-        link_length as f64 / text_len as f64
-    } else {
-        0.0
-    }
-}
-
-fn dom_inner_text(node: &NodeRef) -> String {
-    node.text_contents()
-}
-
-fn mark_data_tables(root: &NodeRef) {
-    if let Ok(tables) = root.select("table") {
-        for table_sel in tables {
-            let table = table_sel.as_node();
-            let is_data = detect_data_table(table);
-            set_data_table_flag(table, is_data);
-        }
-    }
-}
-
-fn detect_data_table(table: &NodeRef) -> bool {
-    if let Some(element) = table.as_element() {
-        let attrs = element.attributes.borrow();
-        if matches!(attrs.get("role"), Some(role) if role == "presentation") {
-            return false;
-        }
-        if matches!(attrs.get("datatable"), Some(val) if val == "0") {
-            return false;
-        }
-        if attrs.get("summary").is_some() {
-            return true;
-        }
-    }
-
-    if table
-        .select("caption")
-        .ok()
-        .and_then(|mut c| c.next())
-        .is_some()
-    {
-        return true;
-    }
-
-    let has_data_descendant = ["col", "colgroup", "tfoot", "thead", "th"]
-        .iter()
-        .any(|tag| table.select(tag).ok().and_then(|mut c| c.next()).is_some());
-    if has_data_descendant {
-        return true;
-    }
-
-    if table
-        .select("table")
-        .ok()
-        .and_then(|mut c| c.next())
-        .is_some()
-    {
-        return false;
-    }
-
-    let (rows, columns) = get_row_and_column_count(table);
-    if rows == 0 || columns == 0 {
-        return false;
-    }
-    if rows == 1 || columns == 1 {
-        return false;
-    }
-    if rows >= 10 || columns > 4 {
-        return true;
-    }
-    rows * columns > 10
-}
-
-fn get_row_and_column_count(table: &NodeRef) -> (usize, usize) {
-    let mut rows = 0;
-    let mut columns = 0;
-    if let Ok(trs) = table.select("tr") {
-        for tr in trs {
-            rows += 1;
-            let cols = tr
-                .as_node()
-                .children()
-                .filter(|child| {
-                    if let Some(elem) = child.as_element() {
-                        let name = elem.name.local.as_ref().to_ascii_lowercase();
-                        name == "td" || name == "th"
-                    } else {
-                        false
-                    }
-                })
-                .count();
-            columns = columns.max(cols);
-        }
-    }
-    (rows, columns)
-}
-
-fn set_data_table_flag(node: &NodeRef, is_data: bool) {
-    if let Some(element) = node.as_element() {
-        let mut attrs = element.attributes.borrow_mut();
-        let value = if is_data { "true" } else { "false" }.to_string();
-        attrs.insert("data-readability-datatable", value);
-    }
-}
-
-fn is_data_table(node: &NodeRef) -> bool {
-    if let Some(element) = node.as_element() {
-        let attrs = element.attributes.borrow();
-        matches!(
-            attrs.get("data-readability-datatable"),
-            Some(value) if value == "true"
-        )
-    } else {
-        false
-    }
-}
-
-fn node_contains_data_table(node: &NodeRef) -> bool {
-    if let Ok(tables) = node.select("table") {
-        for table in tables {
-            if is_data_table(&table.as_node().clone()) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn has_ancestor<F>(node: &NodeRef, mut predicate: F) -> bool
-where
-    F: FnMut(&NodeRef) -> bool,
-{
-    let mut current = node.parent();
-    while let Some(parent) = current {
-        if let NodeData::Element(_) = parent.data() {
-            if predicate(&parent) {
-                return true;
-            }
-        }
-        current = parent.parent();
-    }
-    false
-}
-
-fn node_has_tag(node: &NodeRef, tag: &str) -> bool {
-    if let Some(element) = node.as_element() {
-        element.name.local.as_ref().eq_ignore_ascii_case(tag)
-    } else {
-        false
-    }
-}
-
-fn is_table(node: &NodeRef) -> bool {
-    node_has_tag(node, "table")
-}
-
-fn count_descendants(node: &NodeRef, selector: &str) -> usize {
-    node.select(selector).map(|iter| iter.count()).unwrap_or(0)
-}
-
-fn node_has_allowed_video(node: &NodeRef) -> bool {
-    if let Some(element) = node.as_element() {
-        let attrs = element.attributes.borrow();
-        for (_, attribute) in attrs.map.iter() {
-            if REGEXPS.videos.is_match(&attribute.value) {
-                return true;
-            }
-        }
-    }
-    if node_has_tag(node, "object") && REGEXPS.videos.is_match(&node.text_contents()) {
-        return true;
-    }
-    false
-}
-
-fn build_textish_tags() -> Vec<&'static str> {
-    let mut tags = vec!["span", "li", "td"];
-    for tag in DIV_TO_P_ELEMS.iter() {
-        tags.push(tag);
-    }
-    tags
-}
-
-fn get_text_density(node: &NodeRef, tags: &[&str]) -> f64 {
-    let total_text = dom_inner_text(node).len() as f64;
-    if total_text == 0.0 {
-        return 0.0;
-    }
-
-    let mut child_text = 0.0;
-    for tag in tags {
-        if let Ok(matches) = node.select(tag) {
-            for child in matches {
-                child_text += dom_inner_text(&child.as_node().clone()).len() as f64;
-            }
-        }
-    }
-    child_text / total_text
-}
-
-fn get_dom_class_weight(node: &NodeRef) -> i32 {
-    let mut weight = 0;
-    if let Some(element) = node.as_element() {
-        let attrs = element.attributes.borrow();
-        if let Some(class) = attrs.get("class") {
-            if REGEXPS.negative.is_match(class) {
-                weight -= 25;
-            }
-            if REGEXPS.positive.is_match(class) {
-                weight += 25;
-            }
-        }
-        if let Some(id) = attrs.get("id") {
-            if REGEXPS.negative.is_match(id) {
-                weight -= 25;
-            }
-            if REGEXPS.positive.is_match(id) {
-                weight += 25;
-            }
-        }
-    }
-    weight
-}
-
-/// Get combined class and id string from a DOM node for pattern matching.
-fn get_dom_class_id_string(node: &NodeRef) -> String {
-    if let Some(element) = node.as_element() {
-        let attrs = element.attributes.borrow();
-        let class = attrs.get("class").unwrap_or("");
-        let id = attrs.get("id").unwrap_or("");
-        format!("{} {}", class, id).to_lowercase()
-    } else {
-        String::new()
-    }
+    Some(serialized)
 }
 
 /// Regex for comment-related patterns that should always be removed.
@@ -578,6 +158,41 @@ static H3_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h3").unwrap()
 static H4_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h4").unwrap());
 static H5_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h5").unwrap());
 static H6_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h6").unwrap());
+
+// Selectors used by the scraper-based DOM cleanup path.
+static BODY_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("body").unwrap());
+static TABLE_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("table").unwrap());
+static TR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("tr").unwrap());
+static CAPTION_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("caption").unwrap());
+static DATA_TABLE_DESCENDANT_SELECTOR: Lazy<Selector> =
+    Lazy::new(|| Selector::parse("col, colgroup, tfoot, thead, th").unwrap());
+static UL_OL_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("ul, ol").unwrap());
+static EMBED_GROUP_SELECTOR: Lazy<Selector> =
+    Lazy::new(|| Selector::parse("object, embed, iframe").unwrap());
+static HEADINGS_SELECTOR: Lazy<Selector> =
+    Lazy::new(|| Selector::parse("h1, h2, h3, h4, h5, h6").unwrap());
+static TEXTISH_SELECTOR: Lazy<Selector> = Lazy::new(|| {
+    Selector::parse("span, li, td, blockquote, dl, div, img, ol, p, pre, table, ul").unwrap()
+});
+static FORM_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("form").unwrap());
+static FIELDSET_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("fieldset").unwrap());
+static DIV_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("div").unwrap());
+static SECTION_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("section").unwrap());
+static UL_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("ul").unwrap());
+static OL_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("ol").unwrap());
+
+fn cleanup_tag_selector(tag: &str) -> Option<&'static Selector> {
+    match tag {
+        "form" => Some(&FORM_SELECTOR),
+        "fieldset" => Some(&FIELDSET_SELECTOR),
+        "table" => Some(&TABLE_SELECTOR),
+        "ul" => Some(&UL_SELECTOR),
+        "ol" => Some(&OL_SELECTOR),
+        "div" => Some(&DIV_SELECTOR),
+        "section" => Some(&SECTION_SELECTOR),
+        _ => None,
+    }
+}
 
 fn should_remove_block(fragment: &str, tag: &str) -> bool {
     let stats = compute_fragment_stats(fragment);
@@ -864,6 +479,350 @@ pub fn prep_document(html: &str) -> String {
     html = form_regex.replace_all(&html, "").to_string();
 
     html
+}
+
+fn node_has_tag(element: ElementRef, tag: &str) -> bool {
+    element.value().name().eq_ignore_ascii_case(tag)
+}
+
+fn is_table(element: ElementRef) -> bool {
+    node_has_tag(element, "table")
+}
+
+fn get_dom_class_id_string(element: ElementRef) -> String {
+    let class = element.value().attr("class").unwrap_or("");
+    let id = element.value().attr("id").unwrap_or("");
+    format!("{} {}", class, id).to_lowercase()
+}
+
+fn get_dom_class_weight(element: ElementRef) -> i32 {
+    let mut weight = 0;
+    if let Some(class) = element.value().attr("class") {
+        if REGEXPS.negative.is_match(class) {
+            weight -= 25;
+        }
+        if REGEXPS.positive.is_match(class) {
+            weight += 25;
+        }
+    }
+    if let Some(id) = element.value().attr("id") {
+        if REGEXPS.negative.is_match(id) {
+            weight -= 25;
+        }
+        if REGEXPS.positive.is_match(id) {
+            weight += 25;
+        }
+    }
+    weight
+}
+
+fn is_data_table(id: NodeId, marks: &HashSet<NodeId>) -> bool {
+    marks.contains(&id)
+}
+
+fn dom_inner_text(element: ElementRef) -> String {
+    element.text().collect::<String>()
+}
+
+fn count_descendants(element: ElementRef, selector: &Selector) -> usize {
+    element.select(selector).count()
+}
+
+fn dom_link_density(element: ElementRef, text_len: usize) -> f64 {
+    if text_len == 0 {
+        return 1.0;
+    }
+    let mut link_length = 0usize;
+    for link in element.select(&LINK_SELECTOR) {
+        link_length += link.text().collect::<String>().len();
+    }
+    link_length as f64 / text_len as f64
+}
+
+fn get_text_density(element: ElementRef, selector: &Selector) -> f64 {
+    let total_text = dom_inner_text(element).len() as f64;
+    if total_text == 0.0 {
+        return 0.0;
+    }
+    let mut child_text = 0.0f64;
+    for child in element.select(selector) {
+        child_text += dom_inner_text(child).len() as f64;
+    }
+    child_text / total_text
+}
+
+fn node_has_allowed_video(element: ElementRef) -> bool {
+    for (_, value) in element.value().attrs() {
+        if REGEXPS.videos.is_match(value) {
+            return true;
+        }
+    }
+    if node_has_tag(element, "object")
+        && REGEXPS.videos.is_match(&element.text().collect::<String>())
+    {
+        return true;
+    }
+    false
+}
+
+fn detect_data_table(table: ElementRef) -> bool {
+    if let Some(role) = table.value().attr("role") {
+        if role == "presentation" {
+            return false;
+        }
+    }
+    if let Some(val) = table.value().attr("datatable") {
+        if val == "0" {
+            return false;
+        }
+    }
+    if table.value().attr("summary").is_some() {
+        return true;
+    }
+
+    if table.select(&CAPTION_SELECTOR).next().is_some() {
+        return true;
+    }
+
+    if table.select(&DATA_TABLE_DESCENDANT_SELECTOR).next().is_some() {
+        return true;
+    }
+
+    if table.select(&TABLE_SELECTOR).next().is_some() {
+        return false;
+    }
+
+    let (rows, columns) = get_row_and_column_count(table);
+    if rows == 0 || columns == 0 {
+        return false;
+    }
+    if rows == 1 || columns == 1 {
+        return false;
+    }
+    if rows >= 10 || columns > 4 {
+        return true;
+    }
+    rows * columns > 10
+}
+
+fn clean_conditionally_tag(
+    doc: &mut Html,
+    root_id: NodeId,
+    tag: &str,
+    marks: &HashSet<NodeId>,
+) {
+    let Some(selector) = cleanup_tag_selector(tag) else {
+        return;
+    };
+
+    // Phase A: collect NodeIds to detach under immutable tree borrow.
+    let to_detach: Vec<NodeId> = {
+        let Some(root_node) = doc.tree.get(root_id) else {
+            return;
+        };
+        let Some(root_el) = ElementRef::wrap(root_node) else {
+            return;
+        };
+        root_el
+            .select(selector)
+            .filter(|el| should_remove_dom_node(*el, tag, marks))
+            .map(|el| el.id())
+            .collect()
+    };
+
+    // Phase B: detach under mutable borrow. Safe if a node was already detached
+    // by a prior pass — ego-tree keeps the node in the arena and detach is
+    // effectively idempotent on orphan subtrees.
+    for id in to_detach {
+        if let Some(mut node_mut) = doc.tree.get_mut(id) {
+            node_mut.detach();
+        }
+    }
+}
+
+fn should_remove_dom_node(element: ElementRef, tag: &str, marks: &HashSet<NodeId>) -> bool {
+    let class_id = get_dom_class_id_string(element);
+    if is_comment_section(&class_id) {
+        return true;
+    }
+
+    let text = element.text().collect::<String>();
+    let trimmed = text.trim();
+    if trimmed.len() > 600 {
+        return false;
+    }
+
+    let mut is_list = tag.eq_ignore_ascii_case("ul") || tag.eq_ignore_ascii_case("ol");
+    if !is_list {
+        let node_text_len = trimmed.len().max(1);
+        let list_text_len: usize = element
+            .select(&UL_OL_SELECTOR)
+            .map(|n| dom_inner_text(n).len())
+            .sum();
+        is_list = (list_text_len as f64 / node_text_len as f64) > 0.9;
+    }
+
+    if tag.eq_ignore_ascii_case("table") && is_data_table(element.id(), marks) {
+        return false;
+    }
+
+    if has_ancestor(element, |anc| {
+        is_table(anc) && is_data_table(anc.id(), marks)
+    }) {
+        return false;
+    }
+
+    if has_ancestor(element, |anc| node_has_tag(anc, "code")) {
+        return false;
+    }
+
+    if node_contains_data_table(element, marks) {
+        return false;
+    }
+
+    let content_length = trimmed.len();
+    let link_density = dom_link_density(element, content_length);
+
+    let weight = get_dom_class_weight(element);
+    if weight < 0 && (link_density > 0.25 || content_length < 100) {
+        return true;
+    }
+
+    if trimmed.matches(',').count() >= 10 {
+        return false;
+    }
+
+    let p = count_descendants(element, &P_SELECTOR);
+    let img = count_descendants(element, &IMG_SELECTOR);
+    let li = count_descendants(element, &LI_SELECTOR).saturating_sub(100);
+    let input = count_descendants(element, &INPUT_SELECTOR);
+    let heading_density = get_text_density(element, &HEADINGS_SELECTOR);
+
+    let mut embed_count = 0usize;
+    for embed in element.select(&EMBED_GROUP_SELECTOR) {
+        if node_has_allowed_video(embed) {
+            return false;
+        }
+        embed_count += 1;
+    }
+
+    if REGEXPS.ad_words.is_match(trimmed) || REGEXPS.loading_words.is_match(trimmed) {
+        return true;
+    }
+    let text_density = get_text_density(element, &TEXTISH_SELECTOR);
+    let is_figure_child = has_ancestor(element, |anc| node_has_tag(anc, "figure"));
+
+    let comma_count = trimmed.matches(',').count();
+    if comma_count >= 10 {
+        return false;
+    }
+
+    let mut should_remove = false;
+    if !is_figure_child && img > 1 && p > 0 && (p as f64 / img as f64) < 0.5 {
+        should_remove = true;
+    }
+    if !is_list && li > p {
+        should_remove = true;
+    }
+    if input > p.saturating_div(3) {
+        should_remove = true;
+    }
+    if !is_list
+        && !is_figure_child
+        && heading_density < 0.9
+        && content_length < 25
+        && link_density > 0.0
+    {
+        should_remove = true;
+    }
+    if !is_list && weight < 25 && link_density > 0.2 {
+        should_remove = true;
+    }
+    if weight >= 25 && link_density > 0.5 {
+        should_remove = true;
+    }
+    if (embed_count == 1 && content_length < 75) || embed_count > 1 {
+        should_remove = true;
+    }
+    if img == 0 && text_density == 0.0 {
+        should_remove = true;
+    }
+
+    if is_list && should_remove {
+        let simple_children = element.children().all(|child| {
+            if !matches!(child.value(), ScraperNode::Element(_)) {
+                return true;
+            }
+            child
+                .children()
+                .filter(|n| matches!(n.value(), ScraperNode::Element(_)))
+                .count()
+                <= 1
+        });
+        if simple_children {
+            let li_count = count_descendants(element, &LI_SELECTOR);
+            if li_count > 0 && img == li_count {
+                should_remove = false;
+            }
+        }
+    }
+
+    should_remove
+}
+
+fn node_contains_data_table(element: ElementRef, marks: &HashSet<NodeId>) -> bool {
+    for table in element.select(&TABLE_SELECTOR) {
+        if marks.contains(&table.id()) {
+            return true;
+        }
+    }
+    false
+}
+
+fn mark_data_tables(root: ElementRef) -> HashSet<NodeId> {
+    let mut marks = HashSet::new();
+    for table in root.select(&TABLE_SELECTOR) {
+        if detect_data_table(table) {
+            marks.insert(table.id());
+        }
+    }
+    marks
+}
+
+fn has_ancestor<F>(element: ElementRef, mut predicate: F) -> bool
+where
+    F: FnMut(ElementRef) -> bool,
+{
+    let mut current = element.parent();
+    while let Some(node) = current {
+        if let Some(parent_el) = ElementRef::wrap(node) {
+            if predicate(parent_el) {
+                return true;
+            }
+        }
+        current = node.parent();
+    }
+    false
+}
+
+fn get_row_and_column_count(table: ElementRef) -> (usize, usize) {
+    let mut rows = 0usize;
+    let mut columns = 0usize;
+    for tr in table.select(&TR_SELECTOR) {
+        rows += 1;
+        let cols = tr
+            .children()
+            .filter(|child| match child.value() {
+                ScraperNode::Element(e) => {
+                    let name = e.name();
+                    name.eq_ignore_ascii_case("td") || name.eq_ignore_ascii_case("th")
+                }
+                _ => false,
+            })
+            .count();
+        columns = columns.max(cols);
+    }
+    (rows, columns)
 }
 
 #[cfg(test)]
