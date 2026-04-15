@@ -5,9 +5,7 @@
 [![License](https://img.shields.io/crates/l/readabilityrs)](LICENSE)
 [![Downloads](https://img.shields.io/crates/d/readabilityrs)](https://crates.io/crates/readabilityrs)
 
-readabilityrs extracts article content from HTML web pages using Mozilla's Readability algorithm. The library identifies and isolates the main article text while removing navigation, advertisements, and other clutter.
-
-This is a Rust port of [Mozilla's Readability.js](https://github.com/mozilla/readability), which powers Firefox's Reader View. The implementation passes 93.8% of Mozilla's test suite with full document preprocessing support.
+A Rust port of [Mozilla's Readability.js](https://github.com/mozilla/readability) — the algorithm behind Firefox's Reader View. Hand it a page of HTML and it pulls out the article itself: title, byline, body, excerpt, and a bit more. Navigation, ads, related-article rails, and the rest of the page furniture get left behind. It passes 122 of 130 cases in Mozilla's own test suite (93.8%).
 
 ## Install
 Add to your project:
@@ -49,11 +47,14 @@ if let Some(article) = readability.parse() {
 }
 ```
 
-## Content Extraction
-The library uses Mozilla's content scoring algorithm to identify the main article. Elements are scored based on tag types, text density, link density, and class name patterns. Document preprocessing removes scripts and styles, unwraps noscript tags, and normalizes deprecated elements before extraction, improving accuracy by 2.3 percentage points compared to parsing raw HTML.
+## How extraction works
+Before scoring anything, the document is preprocessed: scripts and styles are dropped, `<noscript>` wrappers around lazy-loaded images are unwrapped, and deprecated elements get normalized. Skipping this step and scoring raw HTML costs roughly 2.3 percentage points of accuracy on the Mozilla suite, so it's on by default.
 
-## Metadata Extraction
-Metadata is extracted from JSON-LD, OpenGraph, Twitter Cards, Dublin Core, and standard meta tags in that priority order. The library detects authors through rel="author" links and common byline patterns, extracts clean titles by removing site names, and generates excerpts from the first substantial paragraph.
+Scoring follows Mozilla's algorithm — elements are ranked by tag type, text density, link density, and class/id patterns, and the winning subtree becomes the article body.
+
+Metadata is pulled from JSON-LD first, then OpenGraph, Twitter Cards, Dublin Core, and finally plain meta tags, in that priority order. Authors come from `rel="author"` links and common byline patterns; titles have the site name stripped off; excerpts are taken from the first substantial paragraph.
+
+If you pass a base URL when constructing `Readability`, relative `href`s and `src`s in the output get resolved against it — handy when the extracted HTML will be rendered somewhere other than the original page.
 
 ## Markdown Output
 
@@ -81,9 +82,6 @@ let options = ReadabilityOptions::builder()
 
 let readability = Readability::new(&html, None, Some(options))?;
 ```
-
-## URL Handling
-Provide a base URL to convert relative links to absolute URLs. This ensures images, anchors, and embedded content maintain correct paths when displayed outside the original context.
 
 ## Error Handling
 The library returns `Result` types for operations that can fail. Common errors include invalid URLs and parsing failures.
