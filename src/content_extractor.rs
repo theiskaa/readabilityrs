@@ -917,7 +917,7 @@ fn element_to_html(element: ElementRef) -> String {
     html.push_str(&format!("<{tag_name}"));
 
     for (name, value) in elem_data.attrs.iter() {
-        html.push_str(&format!(" {}=\"{}\"", name.local, value));
+        html.push_str(&format!(" {}=\"{}\"", name.local, escape(value)));
     }
 
     if is_void_element(tag_name) {
@@ -967,6 +967,35 @@ fn find_element_by_id<'a>(document: &'a Html, id: &str) -> Option<ElementRef<'a>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_attribute_values_are_escaped() {
+        // Regression: attribute values containing quotes/angle-brackets must be
+        // re-escaped on output. Without this, a value like `{"a":"<b>"}` breaks
+        // the attribute boundary and downstream parses see a mangled element.
+        let html = r##"<html><body><article>
+            <div data-component="liveblog" props="{&quot;keyEvents&quot;:[{&quot;id&quot;:&quot;abc&quot;,&quot;html&quot;:&quot;&lt;p&gt;x&lt;/p&gt;&quot;}]}">
+            <p>This is a substantial paragraph with enough text to satisfy readability thresholds. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+            <p>Another paragraph so the article gets picked up by grab_article. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>
+            </div></article></body></html>"##;
+
+        let document = Html::parse_document(html);
+        let options = ReadabilityOptions::builder().char_threshold(100).build();
+        let content = grab_article(&document, &options).unwrap().unwrap();
+
+        // The attribute value must be round-trippable: re-parsing the output
+        // must yield exactly the original (decoded) attribute value.
+        let reparsed = Html::parse_fragment(&content);
+        let sel = Selector::parse("[data-component=\"liveblog\"]").unwrap();
+        let el = reparsed
+            .select(&sel)
+            .next()
+            .expect("liveblog div should survive the round-trip");
+        assert_eq!(
+            el.value().attr("props").unwrap(),
+            r#"{"keyEvents":[{"id":"abc","html":"<p>x</p>"}]}"#
+        );
+    }
 
     #[test]
     fn test_grab_article_simple() {
