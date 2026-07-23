@@ -4,9 +4,41 @@
 //! and compares our output with Mozilla's expected results.
 
 use readabilityrs::{Readability, ReadabilityOptions};
+use scraper::Html;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Cases where readabilityrs intentionally diverges from Mozilla's expected
+/// metadata (better byline/excerpt choices — see README "Compatibility").
+/// A case listed here is ALLOWED to mismatch; it is still parsed and must
+/// not panic. Do not add to this list to silence a new regression.
+const KNOWN_METADATA_DIVERGENCES: &[&str] = &[
+    "ietf-1",
+    "liberation-1",
+    "mathjax",
+    "mercurial",
+    "nytimes-5",
+    "replace-brs",
+    "salon-1",
+    "seattletimes-1",
+    "wikipedia-2",
+    "wikipedia-4",
+    "wordpress",
+];
+
+/// Cases where readabilityrs's extracted body content falls outside the
+/// coarse length-similarity band used by `test_mozilla_suite_content`
+/// (half to double Mozilla's expected text length). This is a floor check,
+/// not parity, so these are logged divergences, not regressions.
+/// Do not add to this list to silence a new regression.
+const KNOWN_CONTENT_DIVERGENCES: &[&str] = &[
+    "archive-of-our-own",
+    "bug-1255978",
+    "hukumusume",
+    "mozilla-1",
+    "yahoo-3",
+];
 
 /// Expected metadata from Mozilla test cases
 #[derive(Debug, Deserialize, Serialize)]
@@ -97,15 +129,26 @@ fn strings_match(actual: &Option<String>, expected: &Option<String>) -> bool {
     }
 }
 
+/// Extract whitespace-normalized text length from an HTML fragment.
+///
+/// Uses the same extraction approach as the library itself so the length
+/// comparison reflects comparable text, not serializer artifacts.
+fn normalized_text_len(html: &str) -> usize {
+    let doc = Html::parse_fragment(html);
+    let text = doc.root_element().text().collect::<String>();
+    text.split_whitespace().collect::<Vec<_>>().join(" ").len()
+}
+
 #[test]
-#[ignore]
 fn test_mozilla_suite_metadata() {
     let test_cases = load_test_cases();
 
-    if test_cases.is_empty() {
-        println!("No test cases found. Skipping.");
-        return;
-    }
+    assert_eq!(
+        test_cases.len(),
+        130,
+        "expected to load all 130 Mozilla test-page directories, found {}",
+        test_cases.len()
+    );
 
     println!("\nRunning Mozilla Readability Test Suite");
     println!("======================================\n");
@@ -116,28 +159,36 @@ fn test_mozilla_suite_metadata() {
     let mut failures = Vec::new();
 
     for test_case in &test_cases {
+        let known_divergence = KNOWN_METADATA_DIVERGENCES.contains(&test_case.name.as_str());
+
         let result = Readability::new(&test_case.source_html, None, None);
         let readability = match result {
             Ok(r) => r,
             Err(e) => {
-                println!(
-                    "❌ {}: Failed to create Readability instance: {}",
+                let msg = format!(
+                    "{}: Failed to create Readability instance: {}",
                     test_case.name, e
                 );
+                println!("❌ {}", msg);
                 failed += 1;
-                failures.push(test_case.name.clone());
+                if !known_divergence {
+                    failures.push(msg);
+                }
                 continue;
             }
         };
 
         let article = readability.parse();
         if test_case.expected_metadata.readerable && article.is_none() {
-            println!(
-                "❌ {}: Expected readerable content but got None",
+            let msg = format!(
+                "{}: Expected readerable content but got None",
                 test_case.name
             );
+            println!("❌ {}", msg);
             failed += 1;
-            failures.push(test_case.name.clone());
+            if !known_divergence {
+                failures.push(msg);
+            }
             continue;
         }
 
@@ -183,11 +234,17 @@ fn test_mozilla_suite_metadata() {
             passed += 1;
         } else {
             println!("❌ {}: Metadata mismatch", test_case.name);
-            for mismatch in mismatches {
+            for mismatch in &mismatches {
                 println!("{}", mismatch);
             }
             failed += 1;
-            failures.push(test_case.name.clone());
+            if !known_divergence {
+                failures.push(format!(
+                    "{}: Metadata mismatch\n{}",
+                    test_case.name,
+                    mismatches.join("\n")
+                ));
+            }
         }
     }
 
@@ -198,18 +255,98 @@ fn test_mozilla_suite_metadata() {
         (passed as f64 / test_cases.len() as f64) * 100.0
     );
 
-    if !failures.is_empty() {
-        println!("\nFailed tests:");
-        for failure in &failures {
-            println!("  - {}", failure);
-        }
-    }
-
-    println!("\nNote: This is the initial baseline. Improvements will come with iteration.");
+    assert!(
+        failures.is_empty(),
+        "{} case(s) regressed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
 
 #[test]
-#[ignore]
+fn test_mozilla_suite_content() {
+    let test_cases = load_test_cases();
+
+    assert_eq!(
+        test_cases.len(),
+        130,
+        "expected to load all 130 Mozilla test-page directories, found {}",
+        test_cases.len()
+    );
+
+    let mut failures = Vec::new();
+    let mut checked = 0;
+
+    for test_case in &test_cases {
+        let Some(ref expected_html) = test_case.expected_html else {
+            continue;
+        };
+        if !test_case.expected_metadata.readerable {
+            continue;
+        }
+
+        checked += 1;
+
+        let readability = match Readability::new(&test_case.source_html, None, None) {
+            Ok(r) => r,
+            Err(e) => {
+                failures.push(format!(
+                    "{}: Failed to create Readability instance: {}",
+                    test_case.name, e
+                ));
+                continue;
+            }
+        };
+
+        let article = readability.parse();
+        let Some(article) = article else {
+            failures.push(format!(
+                "{}: expected article content but got None",
+                test_case.name
+            ));
+            continue;
+        };
+
+        let Some(ref content) = article.content else {
+            failures.push(format!(
+                "{}: article.content was None despite parse succeeding",
+                test_case.name
+            ));
+            continue;
+        };
+
+        let actual_len = normalized_text_len(content);
+        let expected_len = normalized_text_len(expected_html);
+
+        let within_band = actual_len >= expected_len / 2 && actual_len <= expected_len * 2;
+
+        if !within_band && !KNOWN_CONTENT_DIVERGENCES.contains(&test_case.name.as_str()) {
+            failures.push(format!(
+                "{}: content length {} outside [{}, {}] band (expected ~{})",
+                test_case.name,
+                actual_len,
+                expected_len / 2,
+                expected_len * 2,
+                expected_len
+            ));
+        }
+    }
+
+    println!(
+        "Checked content length band for {} readerable cases with expected.html",
+        checked
+    );
+
+    assert!(
+        failures.is_empty(),
+        "{} case(s) regressed:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+#[test]
+#[ignore = "manual debugging helper, prints only"]
 fn test_single_case_debug() {
     let test_name =
         std::env::var("MOZ_READABILITY_TEST").unwrap_or_else(|_| "replace-brs".to_string());

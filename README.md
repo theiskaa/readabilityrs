@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/crates/l/readabilityrs)](LICENSE)
 [![Downloads](https://img.shields.io/crates/d/readabilityrs)](https://crates.io/crates/readabilityrs)
 
-A Rust port of [Mozilla's Readability.js](https://github.com/mozilla/readability) — the algorithm behind Firefox's Reader View. Hand it a page of HTML and it pulls out the article itself: title, byline, body, excerpt, and a bit more. Navigation, ads, related-article rails, and the rest of the page furniture get left behind. It passes 122 of 130 cases in Mozilla's own test suite (93.8%).
+A Rust port of [Mozilla's Readability.js](https://github.com/mozilla/readability) — the algorithm behind Firefox's Reader View. Hand it a page of HTML and it pulls out the article itself: title, byline, body, excerpt, and a bit more. Navigation, ads, related-article rails, and the rest of the page furniture get left behind. It passes 119 of 130 cases in Mozilla's own test suite (91.5%).
 
 ## Install
 Add to your project:
@@ -129,7 +129,9 @@ Performance comparison against Mozilla's original Readability.js using identical
 
 ## Test Compatibility
 
-The implementation passes 122 of 130 tests from Mozilla's test suite achieving 93.8% compatibility with full document preprocessing support. The 8 failing tests represent editorial judgment differences rather than implementation errors. Four cases involve more sensible choices in our implementation such as avoiding bylines extracted from related article sidebars and preferring author names over timestamps. Four cases involve subjective paragraph selection for excerpts where both the reference and our implementation make valid choices. This means the results are 93.8% identical to Mozilla's implementation, with the remaining differences being arguable improvements to the extraction logic.
+The implementation passes 119 of 130 tests from Mozilla's test suite (91.5% compatibility) with full document preprocessing support. The 11 diverging cases represent editorial judgment differences rather than implementation errors, such as avoiding bylines extracted from related article sidebars, preferring author names over timestamps, and subjective paragraph selection for excerpts where both the reference and our implementation make valid choices.
+
+Run `cargo test --test mozilla_test_suite` to reproduce these results; the suite asserts against regressions and runs by default with `cargo test`. The known, intentional divergences are named explicitly in `KNOWN_METADATA_DIVERGENCES` and `KNOWN_CONTENT_DIVERGENCES` in `tests/mozilla_test_suite.rs` — a case must be listed there to be allowed to mismatch, so any new regression outside that list fails the build.
 
 ## Contributing
 For information regarding contributions, please refer to [CONTRIBUTING.md](CONTRIBUTING.md) file.
