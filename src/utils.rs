@@ -287,10 +287,9 @@ fn strip_trailing_datetime_clause<'a>(text: &'a str, allow_strip: bool) -> Cow<'
         return Cow::Borrowed(text);
     }
 
-    let lower = text.to_lowercase();
     for separator in [" | ", " - ", " – ", " — ", " · "] {
-        if let Some(idx) = lower.rfind(separator) {
-            let tail = lower[idx + separator.len()..].trim();
+        if let Some(idx) = text.rfind(separator) {
+            let tail = text[idx + separator.len()..].trim();
             if looks_like_datetime_segment(tail) {
                 return Cow::Owned(text[..idx].trim_end().to_string());
             }
@@ -849,5 +848,34 @@ mod tests {
         assert!(looks_like_dateline("PARIS —"));
         assert!(!looks_like_dateline("By Erin Cunningham"));
         assert!(!looks_like_dateline("Washington Post Staff"));
+    }
+
+    #[test]
+    fn test_strip_trailing_datetime_clause_does_not_panic_on_unicode_length_shift() {
+        // "İ" (U+0130) lowercases to a 3-byte sequence from a 2-byte original,
+        // so a byte index computed on the lowercased string can land mid-character
+        // when applied to the original string. This input previously panicked.
+        let input = "İİİİ | Ş12:30, 5 May 2024";
+        assert_eq!(strip_trailing_datetime_clause(input, true), "İİİİ");
+    }
+
+    #[test]
+    fn test_strip_trailing_datetime_clause_no_strip_on_unicode_leaves_input_unchanged() {
+        // Lowercased length differs from the original here too, but the tail does not
+        // look like a datetime, so no strip should occur and the call must not panic.
+        let input = "İstanbul Correspondent | Senior Editor";
+        assert_eq!(strip_trailing_datetime_clause(input, true), input);
+    }
+
+    #[test]
+    fn test_clean_byline_text_strips_trailing_datetime_with_turkish_name() {
+        let input = "DİLARA ŞENKAYA | 12:30, 5 May 2024";
+        assert_eq!(clean_byline_text(input).unwrap(), "DİLARA ŞENKAYA");
+    }
+
+    #[test]
+    fn test_clean_byline_text_strips_trailing_datetime_ascii_pipe_separator() {
+        let input = "Jane Doe | 08:15, 3 June 2024";
+        assert_eq!(clean_byline_text(input).unwrap(), "Jane Doe");
     }
 }
