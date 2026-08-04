@@ -1,4 +1,5 @@
 pub mod code_blocks;
+mod escaping;
 pub mod footnotes;
 pub mod headings;
 pub mod images;

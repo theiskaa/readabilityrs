@@ -119,11 +119,10 @@ fn extract_latex_source(el: &scraper::ElementRef) -> Option<String> {
     None
 }
 
+/// Escape a math annotation for inclusion in an HTML attribute, without
+/// double-escaping character references that are already present.
 fn escape_attr(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('"', "&quot;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+    super::escaping::escape_html_preserving_entities(s, true)
 }
 
 #[cfg(test)]
@@ -143,5 +142,23 @@ mod tests {
         let html = r#"<mjx-container><math><semantics><annotation encoding="application/x-tex">E = mc^2</annotation></semantics></math></mjx-container>"#;
         let result = standardize_math(html);
         assert!(result.contains("E = mc^2"));
+    }
+
+    #[test]
+    fn test_escape_attr_preserves_existing_entity() {
+        assert_eq!(escape_attr("a &amp;&amp; b"), "a &amp;&amp; b");
+    }
+
+    #[test]
+    fn test_escape_attr_escapes_bare_ampersand() {
+        assert_eq!(escape_attr("a & b"), "a &amp; b");
+    }
+
+    #[test]
+    fn test_escape_attr_multibyte_utf8_does_not_panic() {
+        assert_eq!(
+            escape_attr("\u{3b1} < \u{3b2} & \u{1F600}"),
+            "\u{3b1} &lt; \u{3b2} &amp; \u{1F600}"
+        );
     }
 }

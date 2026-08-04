@@ -125,7 +125,7 @@ pub fn pick_best_srcset(srcset: &str) -> Option<String> {
                 best_url = Some(url);
             }
         } else {
-            // Entry without a descriptor — use as fallback if nothing better found
+            // Entry without a descriptor, used as a fallback if nothing better found
             let url = entry.split_whitespace().next().unwrap_or("");
             if best_url.is_none() && !url.is_empty() {
                 best_url = Some(url.to_string());
@@ -143,73 +143,10 @@ fn replace_src_attr(html: &str, old_val: &str, new_val: &str) -> String {
     html.replacen(&old_pattern, &new_pattern, 1)
 }
 
-/// Maximum characters scanned after an `&` when looking for a terminating `;`.
-/// Bounds the entity lookahead so a `&` followed by megabytes of alphanumerics
-/// can't turn this into an unbounded scan.
-const ENTITY_LOOKAHEAD_LIMIT: usize = 32;
-
-/// Escape `"`, `<`, `>`, and `&` for safe inclusion in an HTML attribute value.
-///
-/// Unlike a blind replace, an `&` that already begins a well-formed character
-/// reference (`&name;`, `&#123;`, `&#x1F;`) is left untouched, so values that
-/// arrive pre-escaped (as they do from the markdown standardization pipeline,
-/// which runs on already-serialized HTML) don't get double-escaped into
-/// `&amp;amp;`. A bare `&`, or one that doesn't resolve to a terminated
-/// entity within `ENTITY_LOOKAHEAD_LIMIT` characters, is still escaped.
+/// Escape a value for inclusion in an HTML attribute, without double-escaping
+/// character references that are already present.
 fn escape_attr(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-
-    for (i, c) in s.char_indices() {
-        match c {
-            '"' => result.push_str("&quot;"),
-            '<' => result.push_str("&lt;"),
-            '>' => result.push_str("&gt;"),
-            '&' => {
-                if is_entity_start(&s[i..]) {
-                    result.push('&');
-                } else {
-                    result.push_str("&amp;");
-                }
-            }
-            _ => result.push(c),
-        }
-    }
-
-    result
-}
-
-/// Returns true if `s` (which starts with `&`) begins a well-formed HTML
-/// character reference terminated by `;` within `ENTITY_LOOKAHEAD_LIMIT`
-/// characters: `&name;`, `&#digits;`, or `&#x`/`&#X` + hex digits + `;`.
-fn is_entity_start(s: &str) -> bool {
-    let rest = &s[1..];
-    let bounded_end = rest
-        .char_indices()
-        .nth(ENTITY_LOOKAHEAD_LIMIT)
-        .map(|(idx, _)| idx)
-        .unwrap_or(rest.len());
-    let window = &rest[..bounded_end];
-
-    let Some(semi_offset) = window.find(';') else {
-        return false;
-    };
-    let body = &window[..semi_offset];
-
-    if let Some(numeric) = body.strip_prefix('#') {
-        if let Some(hex) = numeric
-            .strip_prefix('x')
-            .or_else(|| numeric.strip_prefix('X'))
-        {
-            return !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit());
-        }
-        return !numeric.is_empty() && numeric.chars().all(|c| c.is_ascii_digit());
-    }
-
-    let mut chars = body.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() => chars.all(|c| c.is_ascii_alphanumeric()),
-        _ => false,
-    }
+    super::escaping::escape_html_preserving_entities(s, true)
 }
 
 #[cfg(test)]
@@ -244,38 +181,10 @@ mod tests {
     }
 
     #[test]
-    fn test_escape_attr_preserves_existing_entity() {
-        assert_eq!(escape_attr("a?x=1&amp;y=2"), "a?x=1&amp;y=2");
-    }
-
-    #[test]
-    fn test_escape_attr_escapes_bare_ampersand() {
-        assert_eq!(escape_attr("a?x=1&y=2"), "a?x=1&amp;y=2");
-    }
-
-    #[test]
-    fn test_escape_attr_numeric_entities_and_bare_ampersand() {
-        assert_eq!(
-            escape_attr("&#38; &#x26; &notanentity"),
-            "&#38; &#x26; &amp;notanentity"
-        );
-    }
-
-    #[test]
     fn test_standardize_images_does_not_double_escape_query_string() {
         let html = r#"<img data-src="https://cdn.example.com/i.jpg?w=100&amp;h=50" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"/>"#;
         let result = standardize_images(html);
         assert!(result.contains(r#"src="https://cdn.example.com/i.jpg?w=100&amp;h=50""#));
         assert!(!result.contains("&amp;amp;"));
-    }
-
-    #[test]
-    fn test_escape_attr_multibyte_utf8_does_not_panic() {
-        let value = "caf\u{e9} \u{1F600} \u{4f60}\u{597d} & <tag> \"quoted\"";
-        let escaped = escape_attr(value);
-        assert_eq!(
-            escaped,
-            "caf\u{e9} \u{1F600} \u{4f60}\u{597d} &amp; &lt;tag&gt; &quot;quoted&quot;"
-        );
     }
 }

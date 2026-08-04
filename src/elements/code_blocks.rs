@@ -315,10 +315,11 @@ fn clean_code_content(code: &str) -> String {
 
 /// Escape HTML special characters in code text so it can be safely
 /// embedded inside `<code>` elements without breaking the HTML structure.
+///
+/// Quotes are deliberately left alone: inside `<pre><code>` a quote is ordinary
+/// source text, and escaping it would corrupt the snippet.
 fn html_escape_code(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+    super::escaping::escape_html_preserving_entities(s, false)
 }
 
 /// Format a canonical code block.
@@ -385,5 +386,36 @@ mod tests {
         let code = "let\u{00a0}x = 1;";
         let cleaned = clean_code_content(code);
         assert_eq!(cleaned, "let x = 1;");
+    }
+
+    #[test]
+    fn test_html_escape_code_preserves_existing_entity() {
+        assert_eq!(
+            html_escape_code("if (a &amp;&amp; b)"),
+            "if (a &amp;&amp; b)"
+        );
+    }
+
+    #[test]
+    fn test_html_escape_code_escapes_bare_ampersands_and_angles() {
+        assert_eq!(
+            html_escape_code(r#"if (a && b) { s = "x < y"; }"#),
+            r#"if (a &amp;&amp; b) { s = "x &lt; y"; }"#
+        );
+    }
+
+    #[test]
+    fn test_html_escape_code_leaves_quotes_alone() {
+        let escaped = html_escape_code(r#"let s = "quoted";"#);
+        assert!(!escaped.contains("&quot;"));
+        assert_eq!(escaped, r#"let s = "quoted";"#);
+    }
+
+    #[test]
+    fn test_html_escape_code_multibyte_utf8_does_not_panic() {
+        assert_eq!(
+            html_escape_code("let s = \"\u{4f60}\u{597d}\"; // a & b"),
+            "let s = \"\u{4f60}\u{597d}\"; // a &amp; b"
+        );
     }
 }
