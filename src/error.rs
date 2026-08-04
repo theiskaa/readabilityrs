@@ -116,14 +116,14 @@ pub enum ReadabilityError {
 
     /// Maximum element limit exceeded.
     ///
-    /// This error occurs when the document contains more elements than the configured
-    /// `max_elems_to_parse` limit. This is a safety mechanism to prevent processing
-    /// extremely large or malicious documents.
+    /// Produced when a document holds more elements than
+    /// [`ReadabilityOptions::max_elems_to_parse`](crate::ReadabilityOptions::max_elems_to_parse)
+    /// allows. Carries the element count that was actually found.
     ///
     /// ## Example
     ///
     /// ```rust
-    /// use readabilityrs::{Readability, ReadabilityOptions, ReadabilityError};
+    /// use readabilityrs::{Readability, ReadabilityOptions};
     ///
     /// let html = "<html><body>".to_string() + &"<p>text</p>".repeat(10000) + "</body></html>";
     ///
@@ -132,7 +132,10 @@ pub enum ReadabilityError {
     ///     .build();
     ///
     /// let readability = Readability::new(&html, None, Some(options)).unwrap();
-    /// // Would trigger MaxElementsExceeded if implemented
+    ///
+    /// // `parse` collapses every error into `None`, so the limit surfaces here as
+    /// // "no article" rather than as this variant.
+    /// assert!(readability.parse().is_none());
     /// ```
     #[error("Maximum element limit exceeded: {0}")]
     MaxElementsExceeded(usize),

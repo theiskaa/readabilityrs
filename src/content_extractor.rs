@@ -1,7 +1,7 @@
 //! Core content extraction algorithm (_grabArticle implementation).
 
 use crate::constants::{ParseFlags, DEFAULT_TAGS_TO_SCORE, REGEXPS};
-use crate::error::Result;
+use crate::error::{ReadabilityError, Result};
 use crate::options::ReadabilityOptions;
 use crate::{dom_utils, scoring};
 use scraper::{ElementRef, Html, Selector};
@@ -20,7 +20,25 @@ struct Attempt {
 /// Implements Mozilla's Readability algorithm with adaptive flag removal.
 /// If extraction fails with strict settings, retries with progressively
 /// looser criteria until content is found or all options are exhausted.
+///
+/// Returns [`ReadabilityError::MaxElementsExceeded`] when the document holds more
+/// elements than [`ReadabilityOptions::max_elems_to_parse`] allows. A limit of `0`
+/// means unlimited.
 pub fn grab_article(document: &Html, options: &ReadabilityOptions) -> Result<Option<String>> {
+    if options.max_elems_to_parse > 0 {
+        // Counted before scoring so an oversized document is rejected before any
+        // of the expensive passes run. O(n) over an already-parsed tree.
+        let element_count = document
+            .tree
+            .nodes()
+            .filter(|node| node.value().is_element())
+            .count();
+
+        if element_count > options.max_elems_to_parse {
+            return Err(ReadabilityError::MaxElementsExceeded(element_count));
+        }
+    }
+
     let mut attempts = Vec::new();
     let mut flags =
         ParseFlags::STRIP_UNLIKELYS | ParseFlags::WEIGHT_CLASSES | ParseFlags::CLEAN_CONDITIONALLY;
@@ -1246,6 +1264,79 @@ mod tests {
                 );
             }
         }
+    }
+
+    fn document_with_many_elements() -> String {
+        let paragraphs: String = (1..=50)
+            .map(|i| {
+                format!(
+                    "<p>Paragraph {i} of the article body, long enough to clear the character \
+                     threshold so extraction has a genuine candidate to select.</p>"
+                )
+            })
+            .collect();
+
+        format!("<html><body><article>{paragraphs}</article></body></html>")
+    }
+
+    #[test]
+    fn test_max_elems_to_parse_rejects_oversized_document() {
+        let document = Html::parse_document(&document_with_many_elements());
+        let options = ReadabilityOptions::builder()
+            .char_threshold(100)
+            .max_elems_to_parse(10)
+            .build();
+
+        let result = grab_article(&document, &options);
+
+        assert!(matches!(
+            result,
+            Err(ReadabilityError::MaxElementsExceeded(_))
+        ));
+    }
+
+    #[test]
+    fn test_max_elems_to_parse_zero_means_unlimited() {
+        let document = Html::parse_document(&document_with_many_elements());
+        let options = ReadabilityOptions::builder()
+            .char_threshold(100)
+            .max_elems_to_parse(0)
+            .build();
+
+        assert!(grab_article(&document, &options).unwrap().is_some());
+    }
+
+    #[test]
+    fn test_max_elems_to_parse_generous_limit_parses_normally() {
+        let document = Html::parse_document(&document_with_many_elements());
+        let options = ReadabilityOptions::builder()
+            .char_threshold(100)
+            .max_elems_to_parse(10_000)
+            .build();
+
+        assert!(grab_article(&document, &options).unwrap().is_some());
+    }
+
+    /// `Readability::parse` collapses every error into `None`, so the limit
+    /// surfaces publicly as "no article" rather than as a distinguishable error.
+    #[test]
+    fn test_max_elems_to_parse_surfaces_as_none_from_parse() {
+        let html = document_with_many_elements();
+
+        let capped = ReadabilityOptions::builder()
+            .char_threshold(100)
+            .max_elems_to_parse(10)
+            .build();
+        assert!(crate::Readability::new(&html, None, Some(capped))
+            .unwrap()
+            .parse()
+            .is_none());
+
+        let uncapped = ReadabilityOptions::builder().char_threshold(100).build();
+        assert!(crate::Readability::new(&html, None, Some(uncapped))
+            .unwrap()
+            .parse()
+            .is_some());
     }
 
     #[test]
