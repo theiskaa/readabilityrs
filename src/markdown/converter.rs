@@ -78,7 +78,7 @@ fn convert_element(el: ElementRef, opts: &MarkdownOptions, state: &mut Conversio
             rules::text::convert_emphasis(&inner, opts, state)
         }
         "code" if !state.in_code_block => {
-            // Check if inside a <pre> — handled by the pre/code path
+            // Check if inside a <pre>, handled by the pre/code path
             let inner = el.text().collect::<String>();
             rules::text::convert_inline_code(&inner, opts, state)
         }
@@ -224,14 +224,14 @@ fn convert_element(el: ElementRef, opts: &MarkdownOptions, state: &mut Conversio
             rules::footnotes::convert_footnote_ref(text.trim())
         }
 
-        // Block elements — just convert children with paragraph spacing
+        // Block elements: convert children with paragraph spacing
         "p" => {
             let inner = convert_children(el, opts, state);
             let trimmed = inner.trim();
             if trimmed.is_empty() {
                 String::new()
             } else if state.in_list_item || state.in_table {
-                // Compact mode inside list items and table cells —
+                // Compact mode inside list items and table cells:
                 // no blank-line wrapping so lists stay together and cells stay single-line.
                 format!("{}\n", trimmed)
             } else {
@@ -242,7 +242,7 @@ fn convert_element(el: ElementRef, opts: &MarkdownOptions, state: &mut Conversio
             convert_children(el, opts, state)
         }
 
-        // Superscript (non-footnote) and subscript — extended markdown syntax
+        // Superscript (non-footnote) and subscript: extended markdown syntax
         "sup" => {
             let inner = convert_children(el, opts, state);
             let trimmed = inner.trim();
@@ -262,10 +262,10 @@ fn convert_element(el: ElementRef, opts: &MarkdownOptions, state: &mut Conversio
             }
         }
 
-        // Details/summary — preserve as raw HTML (most renderers support it)
+        // Details/summary: preserved as raw HTML (most renderers support it)
         "details" => format!("\n\n{}\n\n", el.html()),
 
-        // Spans and other inline — transparent pass-through
+        // Spans and other inline: transparent pass-through
         "span" | "abbr" | "cite" | "dfn" | "kbd" | "samp" | "var" | "time" | "data" | "small"
         | "ins" | "u" | "q" | "bdo" | "bdi" | "wbr" | "ruby" | "rt" | "rp" | "summary"
         | "label" => convert_children(el, opts, state),
@@ -281,7 +281,7 @@ fn convert_element(el: ElementRef, opts: &MarkdownOptions, state: &mut Conversio
             format!(": {}\n", inner.trim())
         }
 
-        // Unknown — pass through children
+        // Unknown: pass through children
         _ => convert_children(el, opts, state),
     }
 }
@@ -339,7 +339,7 @@ fn convert_figure(el: ElementRef, opts: &MarkdownOptions, state: &mut Conversion
                 img.value().attr("src").unwrap_or("").to_string(),
             )
         } else {
-            // No img — could be a code figure, pass through
+            // No img, so this could be a code figure, pass through
             return convert_children(el, opts, state);
         }
     } else {
@@ -634,7 +634,7 @@ fn remove_empty_links(s: &str) -> String {
     for m in EMPTY_LINK_RE.find_iter(s) {
         let start = m.start();
         if start > 0 && s.as_bytes()[start - 1] == b'!' {
-            // Preceded by '!' — image ![](url), keep it
+            // Preceded by '!', so it is an image ![](url); keep it
             result.push_str(&s[last..m.end()]);
         } else {
             // Empty link [](url), remove it

@@ -34,7 +34,7 @@ These are documented rather than fixed, so a report about them is a duplicate ra
 - **There is no input size limit.** The `max_elems_to_parse` option is not wired into the parser and has no effect, so nothing bounds the work done on a large document. Candidate lookup also scales worse than linearly with document size. **Bound the input yourself** before parsing, and apply your own timeout, if you accept arbitrary pages.
 - **Deeply nested markup can exhaust the stack.** Several tree walkers recurse once per nesting level with no depth cap. A sufficiently nested document aborts the process, which a caller cannot catch. Cap nesting depth or document size upstream if that matters to you.
 - **Element removal is partly regex-based.** Some cleanup passes match elements with regular expressions rather than on the parsed tree. Regular expressions cannot match balanced tags, so removal can be incomplete or can remove more than intended on adversarial or unusual markup. Treat the output as untrusted regardless.
-- **Very large table cells can be expensive in Markdown output.** Column padding is proportional to the widest cell, so a single oversized cell inflates the rendered table. Bound input size if you enable `output_markdown` on untrusted pages.
+- **Markdown link and image destinations are not escaped.** `alt`, `href` and `title` values are written into `[]()` and `![]()` unchanged, so a crafted value can close the destination early and take control of the resulting link. `sanitize_content` does not apply to the Markdown path at all. Treat `markdown_content` from untrusted pages as untrusted markup.
 
 ## Areas of particular interest
 

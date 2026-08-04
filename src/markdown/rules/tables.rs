@@ -38,6 +38,14 @@ pub fn is_layout_table(table: &ElementRef) -> bool {
     true
 }
 
+/// Upper bound on markdown table column padding.
+///
+/// Pipe tables do not need aligned columns to be valid, so padding past this
+/// only inflates the output: without a bound, one wide cell pads every other
+/// cell in its column, and a column wider than `u16::MAX` panics the runtime
+/// formatting machinery outright.
+const MAX_COL_WIDTH: usize = 200;
+
 /// Convert a simple table to pipe-format markdown.
 pub fn convert_simple_table(headers: &[String], rows: &[Vec<String>]) -> String {
     if headers.is_empty() && rows.is_empty() {
@@ -52,15 +60,19 @@ pub fn convert_simple_table(headers: &[String], rows: &[Vec<String>]) -> String 
         return String::new();
     }
 
-    // Calculate column widths using escaped text (pipes become \|, adding width)
+    // Calculate column widths using escaped text (pipes become \|, adding width).
+    // Widths are clamped to MAX_COL_WIDTH; `{:<width$}` only ever pads, so a cell
+    // longer than the cap is emitted at its natural length rather than truncated.
     let mut col_widths = vec![3usize; num_cols];
     for (i, h) in headers.iter().enumerate() {
-        col_widths[i] = col_widths[i].max(escape_pipe(h).len());
+        col_widths[i] = col_widths[i].max(escape_pipe(h).len()).min(MAX_COL_WIDTH);
     }
     for row in rows {
         for (i, cell) in row.iter().enumerate() {
             if i < num_cols {
-                col_widths[i] = col_widths[i].max(escape_pipe(cell).len());
+                col_widths[i] = col_widths[i]
+                    .max(escape_pipe(cell).len())
+                    .min(MAX_COL_WIDTH);
             }
         }
     }
@@ -114,5 +126,65 @@ mod tests {
         assert!(result.contains("| Name"));
         assert!(result.contains("|---"));
         assert!(result.contains("| Alice"));
+    }
+
+    #[test]
+    fn test_ordinary_table_shape_is_unchanged() {
+        let headers = vec!["A".to_string(), "Name".to_string()];
+        let rows = vec![vec!["1".to_string(), "Alice".to_string()]];
+
+        let result = convert_simple_table(&headers, &rows);
+        let lines: Vec<&str> = result.trim().lines().collect();
+
+        assert_eq!(lines.len(), 3, "header, separator, one data row");
+        assert_eq!(lines[0], "| A   | Name  |");
+        assert_eq!(lines[1], "|-----|-------|");
+        assert_eq!(lines[2], "| 1   | Alice |");
+
+        // Columns start at width 3, so even a one-character column clears the
+        // three-dash minimum a pipe-table separator needs.
+        for segment in lines[1].split('|').filter(|s| !s.is_empty()) {
+            assert!(
+                segment.len() >= 3,
+                "separator segment {segment:?} is below the three-dash minimum"
+            );
+        }
+    }
+
+    #[test]
+    fn test_oversized_cell_does_not_panic() {
+        // Rust caps runtime format widths at u16::MAX, so a cell wider than that
+        // used to abort formatting rather than render.
+        let big_cell = "A".repeat(65_540);
+        let headers = vec!["Name".to_string(), "Data".to_string()];
+        let rows = vec![vec!["Alice".to_string(), big_cell.clone()]];
+
+        let result = convert_simple_table(&headers, &rows);
+
+        assert!(result.contains(&big_cell), "cell content must not be lost");
+    }
+
+    #[test]
+    fn test_wide_cell_does_not_amplify_output() {
+        // One wide cell used to set the column width for every other row, so 300
+        // trivial rows each grew to the width of the widest.
+        let headers = vec!["Name".to_string(), "Data".to_string()];
+        let mut rows = vec![vec!["Alice".to_string(), "B".repeat(60_000)]];
+        rows.extend((0..300).map(|i| vec![format!("row{i}"), "x".to_string()]));
+
+        let input_len: usize = headers.iter().map(|h| h.len()).sum::<usize>()
+            + rows
+                .iter()
+                .flat_map(|r| r.iter().map(|c| c.len()))
+                .sum::<usize>();
+
+        let result = convert_simple_table(&headers, &rows);
+
+        assert!(
+            result.len() < input_len * 3,
+            "output {} bytes for {} bytes of input",
+            result.len(),
+            input_len
+        );
     }
 }

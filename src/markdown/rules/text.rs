@@ -78,7 +78,7 @@ pub fn convert_hr() -> String {
 /// Escape markdown special characters in plain text.
 ///
 /// Escapes characters that are ambiguous inline: `\`, `` ` ``, `*`, `_`, `~`.
-/// Brackets `[` and `]` are NOT escaped — they only form links when paired as
+/// Brackets `[` and `]` are NOT escaped: they only form links when paired as
 /// `[text](url)`, which the converter produces explicitly for real links.
 /// Characters like `.`, `!`, `-`, `#`, `+` are only special at line-start.
 pub fn escape_markdown(text: &str) -> String {

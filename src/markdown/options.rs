@@ -29,7 +29,7 @@ pub enum HeadingStyle {
 /// Link output style.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LinkStyle {
-    /// `[text](url)` — inline (default).
+    /// `[text](url)`, the default.
     Inline,
     /// `[text][ref]` with references collected at end.
     Reference,
