@@ -7,19 +7,6 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use scraper::{Html, Selector};
 
-/// Remove nav-heavy wrappers by descending into content-like children.
-/// Note: "widget" is excluded from this pattern since page builders use it for content.
-fn unwrap_nav_wrappers(html: &str) -> String {
-    static WRAPPER_REGEX: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(
-            r#"(?is)<div[^>]+class="[^"]*(?:navbar|nav|menu|sidebar|header)[^"]*"[^>]*>.*?</div>"#,
-        )
-        .unwrap()
-    });
-
-    WRAPPER_REGEX.replace_all(html, "").to_string()
-}
-
 /// Remove the title element from the article content if it matches the extracted title.
 ///
 /// Finds the first h1 or h2 element whose text content matches the given title
@@ -184,9 +171,6 @@ fn titles_match(title1: &str, title2: &str) -> bool {
 /// * `clean_whitespace_opt` - Whether to normalize whitespace and remove empty paragraphs
 pub fn prep_article(html: &str, clean_styles_opt: bool, clean_whitespace_opt: bool) -> String {
     let mut html = html.to_string();
-
-    // Unwrap nav wrappers before removing elements
-    html = unwrap_nav_wrappers(&html);
 
     // Step 1: Clean inline styles (Mozilla's _cleanStyles)
     // This removes style attributes that can make text invisible or unreadable
@@ -642,5 +626,85 @@ mod tests {
         assert!(cleaned.contains("<header>"));
         assert!(cleaned.contains("By Author"));
         assert!(cleaned.contains("<p>Content</p>"));
+    }
+
+    /// A full article whose body sits inside a single wrapper div, mirroring the
+    /// theme markup that made regex wrapper removal destructive.
+    fn wrapped_article_doc(wrapper_class: &str) -> String {
+        let paragraphs: String = (1..=6)
+            .map(|i| {
+                format!(
+                    "<p>Paragraph {i} of the article body. It carries enough prose to clear the \
+                     character threshold on its own, so the extractor has no excuse to treat this \
+                     document as empty or to fall back to some other subtree.</p>"
+                )
+            })
+            .collect();
+
+        format!(
+            r#"<html><head><title>Wrapped Article</title></head><body>
+                <div id="main">
+                    <div class="{wrapper_class}">
+                        <h1>Wrapped Article</h1>
+                        {paragraphs}
+                    </div>
+                </div>
+            </body></html>"#
+        )
+    }
+
+    #[test]
+    fn test_entry_header_wrapper_keeps_article_body() {
+        let html = wrapped_article_doc("entry-header");
+        let article = crate::Readability::new(&html, None, None)
+            .unwrap()
+            .parse()
+            .expect("a six-paragraph article should be extracted");
+
+        assert!(article.length > 0, "article body was deleted entirely");
+        assert!(article
+            .content
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Paragraph 1 of the article body"));
+    }
+
+    /// `parse()` returning `Some` with an empty body is worse than returning
+    /// `None`: the caller cannot tell that extraction failed. No wrapper class
+    /// may produce that outcome for a document that is plainly an article.
+    #[test]
+    fn test_wrapper_classes_never_yield_empty_article() {
+        // Every one of these is real theme markup. `site-header` and `page-header`
+        // would rightly be dropped if they held only nav links, but here each one
+        // wraps the article body, so the body has to survive.
+        let wrapper_classes = [
+            "entry-header",
+            "post-header",
+            "article-header",
+            "page-header",
+            "site-header",
+            "entry-content",
+        ];
+
+        for class in wrapper_classes {
+            let html = wrapped_article_doc(class);
+            let article = crate::Readability::new(&html, None, None)
+                .unwrap()
+                .parse()
+                .unwrap_or_else(|| panic!("class=\"{class}\": parse() returned None"));
+
+            assert!(
+                article.length > 0,
+                "class=\"{class}\": parse() returned Some with length 0"
+            );
+            assert!(
+                article
+                    .content
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("Paragraph 6 of the article body"),
+                "class=\"{class}\": article body was truncated"
+            );
+        }
     }
 }

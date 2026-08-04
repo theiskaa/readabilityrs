@@ -318,6 +318,17 @@ fn test_mozilla_suite_content() {
         let actual_len = normalized_text_len(content);
         let expected_len = normalized_text_len(expected_html);
 
+        // Unconditional, and deliberately outside the divergence allowlist: a
+        // readerable page that yields an empty body is never an acceptable
+        // divergence, and the band below cannot catch it when expected_len <= 1.
+        if actual_len == 0 {
+            failures.push(format!(
+                "{}: extracted content is empty (expected ~{})",
+                test_case.name, expected_len
+            ));
+            continue;
+        }
+
         let within_band = actual_len >= expected_len / 2 && actual_len <= expected_len * 2;
 
         if !within_band && !KNOWN_CONTENT_DIVERGENCES.contains(&test_case.name.as_str()) {
