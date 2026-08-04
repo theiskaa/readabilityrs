@@ -439,20 +439,16 @@ fn replace_brs_in_content(content: &str) -> String {
 /// Prepare document for readability processing
 ///
 /// This function implements Mozilla's _prepDocument functionality:
-/// - Remove script and style elements
 /// - Replace font tags with span
 /// - Unwrap noscript tags to reveal lazy-loaded images
 /// - Remove form elements
 ///
-/// This should be called BEFORE content extraction
+/// Script and style removal is not done here: it cannot be expressed soundly as
+/// a regex over raw text, so it runs on the parsed tree in
+/// [`remove_unsafe_elements`] instead. Call this BEFORE content extraction, then
+/// parse, then call that.
 pub fn prep_document(html: &str) -> String {
     let mut html = html.to_string();
-
-    let script_regex = regex::Regex::new(r"(?i)<script\b[^>]*>[\s\S]*?</script>").unwrap();
-    html = script_regex.replace_all(&html, "").to_string();
-
-    let style_regex = regex::Regex::new(r"(?i)<style\b[^>]*>[\s\S]*?</style>").unwrap();
-    html = style_regex.replace_all(&html, "").to_string();
 
     let font_open_regex = regex::Regex::new(r"<font\b").unwrap();
     html = font_open_regex.replace_all(&html, "<span").to_string();
@@ -476,6 +472,32 @@ pub fn prep_document(html: &str) -> String {
     html = form_regex.replace_all(&html, "").to_string();
 
     html
+}
+
+static UNSAFE_ELEMENT_SELECTOR: Lazy<Selector> =
+    Lazy::new(|| Selector::parse("script, style, noscript, template").unwrap());
+
+/// Detach script, style, noscript and template elements from a parsed document.
+///
+/// This is the tree-level counterpart to [`prep_document`], and exists because a
+/// regex cannot recognize every end tag the HTML tokenizer accepts: `</script >`,
+/// `</script\n>` and `</SCRIPT\t>` all close a script element, and a pattern
+/// requiring the literal `</script>` lets the whole element through.
+///
+/// Run it on the document produced by parsing [`prep_document`]'s output, so the
+/// noscript unwrapping that reveals lazy-loaded images has already happened and
+/// only image-free noscript blocks remain to be dropped.
+pub fn remove_unsafe_elements(doc: &mut Html) {
+    let to_detach: Vec<NodeId> = doc
+        .select(&UNSAFE_ELEMENT_SELECTOR)
+        .map(|el| el.id())
+        .collect();
+
+    for id in to_detach {
+        if let Some(mut node) = doc.tree.get_mut(id) {
+            node.detach();
+        }
+    }
 }
 
 fn node_has_tag(element: ElementRef, tag: &str) -> bool {
@@ -627,7 +649,7 @@ fn clean_conditionally_tag(doc: &mut Html, root_id: NodeId, tag: &str, marks: &H
     };
 
     // Phase B: detach under mutable borrow. Safe if a node was already detached
-    // by a prior pass — ego-tree keeps the node in the arena and detach is
+    // by a prior pass; ego-tree keeps the node in the arena and detach is
     // effectively idempotent on orphan subtrees.
     for id in to_detach {
         if let Some(mut node_mut) = doc.tree.get_mut(id) {

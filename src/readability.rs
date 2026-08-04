@@ -167,7 +167,8 @@ impl Readability {
         self.metadata = get_article_metadata(&self.document, json_ld);
 
         let preprocessed_html = cleaner::prep_document(&self.html);
-        let preprocessed_doc = Html::parse_document(&preprocessed_html);
+        let mut preprocessed_doc = Html::parse_document(&preprocessed_html);
+        cleaner::remove_unsafe_elements(&mut preprocessed_doc);
 
         match grab_article(&preprocessed_doc, &self.options) {
             Ok(Some(content_html)) => {
