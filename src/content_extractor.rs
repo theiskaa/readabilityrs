@@ -1,6 +1,6 @@
 //! Core content extraction algorithm (_grabArticle implementation).
 
-use crate::constants::{ParseFlags, DEFAULT_TAGS_TO_SCORE, REGEXPS};
+use crate::constants::{ParseFlags, DEFAULT_TAGS_TO_SCORE, MAX_DOM_DEPTH, REGEXPS};
 use crate::error::{ReadabilityError, Result};
 use crate::options::ReadabilityOptions;
 use crate::{dom_utils, scoring};
@@ -665,7 +665,7 @@ fn extract_article_content(
     let mut article_content = Vec::new();
     let Some(parent) = best_candidate.parent() else {
         // No parent, just return the best candidate
-        let html = element_to_html(best_candidate, options.sanitize_content);
+        let html = element_to_html(best_candidate, options.sanitize_content, 0);
         let html = crate::cleaner::replace_brs(&html);
         return Ok(html);
     };
@@ -706,7 +706,7 @@ fn extract_article_content(
         };
 
         if should_include {
-            let mut sibling_html = element_to_html(sibling, options.sanitize_content);
+            let mut sibling_html = element_to_html(sibling, options.sanitize_content, 0);
             sibling_html = crate::cleaner::replace_brs(&sibling_html);
 
             if !sibling_html.trim().is_empty() {
@@ -987,8 +987,11 @@ fn is_dangerous_url(value: &str) -> bool {
 /// attributes and dangerous URL schemes in `href`/`src`/`xlink:href` are dropped
 /// from the rest; see [`is_unsafe_element`], [`is_event_handler_attr`] and
 /// [`is_dangerous_url`]. This is an opt-in harm reducer, not a full sanitizer.
-fn element_to_html(element: ElementRef, sanitize: bool) -> String {
+fn element_to_html(element: ElementRef, sanitize: bool, depth: usize) -> String {
     use scraper::node::Node;
+    if depth > MAX_DOM_DEPTH {
+        return String::new();
+    }
     if !dom_utils::is_probably_visible(element) {
         return String::new();
     }
@@ -1032,7 +1035,7 @@ fn element_to_html(element: ElementRef, sanitize: bool) -> String {
         match child.value() {
             Node::Element(_) => {
                 if let Some(child_elem) = ElementRef::wrap(child) {
-                    let child_html = element_to_html(child_elem, sanitize);
+                    let child_html = element_to_html(child_elem, sanitize, depth + 1);
                     if !child_html.is_empty() {
                         html.push_str(&child_html);
                     }
@@ -1329,6 +1332,52 @@ mod tests {
             .unwrap()
             .parse()
             .is_some());
+    }
+
+    /// Comfortably past MAX_DOM_DEPTH, and verified to overflow the stack when the
+    /// depth guard is removed, so these tests fail loudly if the guard regresses.
+    const NESTING_BEYOND_LIMIT: usize = 2_000;
+
+    fn deeply_nested_article(depth: usize) -> String {
+        let mut html = String::from("<html><body><article>");
+        html.push_str(&"<div>".repeat(depth));
+        html.push_str(
+            "<p>Substantial paragraph text long enough to be scored as content. Lorem ipsum \
+             dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt.</p>",
+        );
+        html.push_str(&"</div>".repeat(depth));
+        html.push_str("</article></body></html>");
+        html
+    }
+
+    /// Without the depth bound this overflows the stack, which aborts the
+    /// process rather than unwinding, so a caller cannot defend against it.
+    #[test]
+    fn test_deeply_nested_html_does_not_overflow_serializer() {
+        let document = Html::parse_document(&deeply_nested_article(NESTING_BEYOND_LIMIT));
+        let selector = Selector::parse("article").unwrap();
+        let article = document.select(&selector).next().unwrap();
+
+        let html = element_to_html(article, false, 0);
+
+        assert!(html.starts_with("<article>"));
+        assert!(html.ends_with("</article>"));
+    }
+
+    /// The bound has to be generous enough that ordinary markup is untouched.
+    #[test]
+    fn test_moderate_nesting_keeps_content() {
+        let html = deeply_nested_article(100);
+        let article = crate::Readability::new(&html, None, None)
+            .unwrap()
+            .parse()
+            .expect("a hundred levels of nesting is ordinary markup");
+
+        assert!(article
+            .content
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Substantial paragraph text"));
     }
 
     #[test]

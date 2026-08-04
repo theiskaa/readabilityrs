@@ -863,7 +863,11 @@ fn extract_standfirst_caps_byline(document: &Html) -> Option<String> {
 }
 
 fn build_byline_text(element: &ElementRef) -> String {
-    fn append_children_text(element: &ElementRef, out: &mut String) {
+    fn append_children_text(element: &ElementRef, out: &mut String, depth: usize) {
+        if depth > crate::constants::MAX_DOM_DEPTH {
+            return;
+        }
+
         for child in element.children() {
             match child.value() {
                 Node::Text(text) => {
@@ -883,7 +887,7 @@ fn build_byline_text(element: &ElementRef) -> String {
                         out.push('\n');
                     }
                     if let Some(child_el) = ElementRef::wrap(child) {
-                        append_children_text(&child_el, out);
+                        append_children_text(&child_el, out, depth + 1);
                     }
                 }
                 _ => {}
@@ -892,7 +896,7 @@ fn build_byline_text(element: &ElementRef) -> String {
     }
 
     let mut buffer = String::new();
-    append_children_text(element, &mut buffer);
+    append_children_text(element, &mut buffer, 0);
     buffer
 }
 
@@ -2135,5 +2139,33 @@ mod tests {
         );
         let dom_byline = extract_byline_from_document(&document).expect("should detect DOM byline");
         assert_eq!(dom_byline.text, "By Erin Cunningham");
+    }
+
+    /// `build_byline_text` recurses per nesting level; without the depth bound
+    /// a hostile byline container overflows the stack.
+    #[test]
+    fn test_deeply_nested_byline_does_not_overflow() {
+        let mut html = "<span>".repeat(2_000);
+        html.push_str("Jane Doe");
+        html.push_str(&"</span>".repeat(2_000));
+
+        let document = Html::parse_fragment(&html);
+        let selector = Selector::parse("span").unwrap();
+        let outermost = document.select(&selector).next().unwrap();
+
+        let byline = build_byline_text(&outermost);
+
+        assert!(byline.len() < html.len());
+    }
+
+    #[test]
+    fn test_moderate_nesting_keeps_byline_text() {
+        let html = format!("{}Jane Doe{}", "<span>".repeat(20), "</span>".repeat(20));
+
+        let document = Html::parse_fragment(&html);
+        let selector = Selector::parse("span").unwrap();
+        let outermost = document.select(&selector).next().unwrap();
+
+        assert_eq!(build_byline_text(&outermost).trim(), "Jane Doe");
     }
 }

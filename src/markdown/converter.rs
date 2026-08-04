@@ -3,6 +3,7 @@ use scraper::{ElementRef, Html, Node, Selector};
 use super::options::MarkdownOptions;
 use super::rules;
 use super::state::ConversionState;
+use crate::constants::MAX_DOM_DEPTH;
 
 /// Convert parsed HTML fragment to markdown string.
 pub fn convert(doc: &Html, opts: &MarkdownOptions) -> String {
@@ -64,7 +65,26 @@ fn convert_children(
 }
 
 /// Convert a single element node to markdown.
+///
+/// Every descent into the DOM passes through here exactly once per level, so
+/// this is where the depth bound is enforced. Past the limit the subtree is
+/// dropped, which keeps the emitted markdown well-formed.
 fn convert_element(el: ElementRef, opts: &MarkdownOptions, state: &mut ConversionState) -> String {
+    if state.depth >= MAX_DOM_DEPTH {
+        return String::new();
+    }
+
+    state.depth += 1;
+    let converted = convert_element_inner(el, opts, state);
+    state.depth -= 1;
+    converted
+}
+
+fn convert_element_inner(
+    el: ElementRef,
+    opts: &MarkdownOptions,
+    state: &mut ConversionState,
+) -> String {
     let tag = el.value().name().to_lowercase();
 
     match tag.as_str() {
@@ -724,5 +744,32 @@ mod tests {
     fn test_post_process_collapses_newlines() {
         let result = post_process("a\n\n\n\n\nb");
         assert_eq!(result, "a\n\nb");
+    }
+
+    /// Without the depth bound in `convert_element` this overflows the stack.
+    /// 2,000 levels is comfortably past `MAX_DOM_DEPTH` and verified to abort
+    /// when the guard is removed.
+    #[test]
+    fn test_deeply_nested_html_does_not_overflow_converter() {
+        let mut html = "<div>".repeat(2_000);
+        html.push_str("<p>Buried paragraph.</p>");
+        html.push_str(&"</div>".repeat(2_000));
+
+        let markdown = super::super::html_to_markdown(&html, &MarkdownOptions::default());
+
+        // The subtree past the limit is dropped, so the buried text is gone,
+        // but the conversion returns rather than killing the process.
+        assert!(markdown.len() < html.len());
+    }
+
+    #[test]
+    fn test_moderate_nesting_keeps_content() {
+        let mut html = "<div>".repeat(50);
+        html.push_str("<p>Buried paragraph.</p>");
+        html.push_str(&"</div>".repeat(50));
+
+        let markdown = super::super::html_to_markdown(&html, &MarkdownOptions::default());
+
+        assert!(markdown.contains("Buried paragraph."));
     }
 }

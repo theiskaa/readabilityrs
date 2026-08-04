@@ -21,4 +21,9 @@ pub struct ConversionState {
     pub in_heading: bool,
     /// True when inside a `<li>`; suppresses paragraph blank-line wrapping.
     pub in_list_item: bool,
+    /// Current DOM recursion depth, bounded by
+    /// [`MAX_DOM_DEPTH`](crate::constants::MAX_DOM_DEPTH). Carried here rather
+    /// than as a parameter because every conversion function already threads
+    /// this state, while `convert_children` alone has around thirty call sites.
+    pub depth: usize,
 }

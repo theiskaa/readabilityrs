@@ -102,3 +102,18 @@ pub const PHRASING_ELEMS: &[&str] = &[
     "OUTPUT", "PROGRESS", "Q", "RUBY", "SAMP", "SCRIPT", "SELECT", "SMALL", "SPAN", "STRONG",
     "SUB", "SUP", "TEXTAREA", "TIME", "VAR", "WBR",
 ];
+
+/// Maximum DOM depth traversed by recursive walkers.
+///
+/// Real-world pages nest well under 100 levels. Beyond this the walkers stop
+/// descending and drop the subtree rather than adding stack frames until the
+/// process aborts, which is what an adversarially nested document would
+/// otherwise cause. A stack overflow cannot be caught, so it has to be avoided
+/// rather than handled.
+///
+/// The value is set from measurement, not taste: the markdown converter has the
+/// largest frames of the three walkers, and in a debug build on a default test
+/// thread stack it survives 384 levels but aborts at 448. 256 leaves roughly
+/// 2.5x headroom over real markup and 1.5x margin below that observed ceiling,
+/// which matters because frame sizes shift with build profile and platform.
+pub const MAX_DOM_DEPTH: usize = 256;
