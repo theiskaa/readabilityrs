@@ -337,9 +337,15 @@ impl ReadabilityOptionsBuilder {
         self
     }
 
-    /// Set link density modifier
+    /// Set link density modifier.
+    ///
+    /// Non-finite values (`NaN`, `±inf`) are ignored and the default is kept.
+    /// They would otherwise propagate into every candidate score and make the
+    /// whole ranking meaningless rather than merely skewed.
     pub fn link_density_modifier(mut self, modifier: f64) -> Self {
-        self.link_density_modifier = Some(modifier);
+        if modifier.is_finite() {
+            self.link_density_modifier = Some(modifier);
+        }
         self
     }
 
@@ -429,5 +435,27 @@ impl ReadabilityOptionsBuilder {
             markdown_options: self.markdown_options.or(defaults.markdown_options),
             sanitize_content: self.sanitize_content.unwrap_or(defaults.sanitize_content),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_link_density_modifier_rejects_non_finite() {
+        let default = ReadabilityOptions::default().link_density_modifier;
+
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let options = ReadabilityOptions::builder()
+                .link_density_modifier(bad)
+                .build();
+            assert_eq!(options.link_density_modifier, default);
+        }
+
+        let options = ReadabilityOptions::builder()
+            .link_density_modifier(0.25)
+            .build();
+        assert_eq!(options.link_density_modifier, 0.25);
     }
 }
