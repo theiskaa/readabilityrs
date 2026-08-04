@@ -28,8 +28,11 @@ pub struct Metadata {
 pub fn get_json_ld(document: &Html) -> Metadata {
     let mut metadata = Metadata::default();
 
+    static SCHEMA_ORG_CONTEXT_REGEX: Lazy<regex::Regex> =
+        Lazy::new(|| regex::Regex::new(r"^https?://schema\.org/?$").unwrap());
+
     let script_selector = Selector::parse("script[type='application/ld+json']").unwrap();
-    let schema_regex = regex::Regex::new(r"^https?://schema\.org/?$").unwrap();
+    let schema_regex = &*SCHEMA_ORG_CONTEXT_REGEX;
 
     for script in document.select(&script_selector) {
         let content = script.text().collect::<String>();
@@ -249,13 +252,19 @@ fn extract_json_ld_image(parsed: &Value) -> Option<String> {
 /// Supports OpenGraph, Twitter Cards, Dublin Core, and standard meta tags.
 pub fn get_article_metadata(document: &Html, json_ld: Metadata) -> Metadata {
     let mut values: HashMap<String, String> = HashMap::new();
-    let property_pattern = regex::Regex::new(
-        r"(?i)\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name|image:url|image:secure_url|image$)\s*"
-    ).unwrap();
+    static META_PROPERTY_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+        regex::Regex::new(
+            r"(?i)\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name|image:url|image:secure_url|image$)\s*"
+        ).unwrap()
+    });
+    static META_NAME_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+        regex::Regex::new(
+            r"(?i)^\s*(?:(?:article|dc|dcterm|og|twitter|parsely|weibo:(?:article|webpage))\s*[-\.:]\s*)?(author|author_name|creator|pub-date|description|title|site_name|image|thumbnail)\s*$"
+        ).unwrap()
+    });
 
-    let name_pattern = regex::Regex::new(
-        r"(?i)^\s*(?:(?:article|dc|dcterm|og|twitter|parsely|weibo:(?:article|webpage))\s*[-\.:]\s*)?(author|author_name|creator|pub-date|description|title|site_name|image|thumbnail)\s*$"
-    ).unwrap();
+    let property_pattern = &*META_PROPERTY_REGEX;
+    let name_pattern = &*META_NAME_REGEX;
 
     let meta_selector = Selector::parse("meta").unwrap();
     for meta in document.select(&meta_selector) {
@@ -1422,20 +1431,23 @@ fn extract_title_from_document(document: &Html) -> Option<String> {
 
     // Title separators: | - – — \ / > »
     // Using alternation instead of character class since pipe needs special handling
-    let sep_regex = regex::Regex::new(r"\s(\||\-|–|—|\\|/|>|»)\s").unwrap();
+    static TITLE_SEPARATOR_REGEX: Lazy<regex::Regex> =
+        Lazy::new(|| regex::Regex::new(r"\s(\||\-|–|—|\\|/|>|»)\s").unwrap());
+    static HIERARCHICAL_SEPARATOR_REGEX: Lazy<regex::Regex> =
+        Lazy::new(|| regex::Regex::new(r"\s[\\//>»]\s").unwrap());
+    static LEADING_SEGMENT_REGEX: Lazy<regex::Regex> =
+        Lazy::new(|| regex::Regex::new(r"(?i)^[^\|\-–—\\//>»]*[\|\-–—\\//>»]").unwrap());
+
+    let sep_regex = &*TITLE_SEPARATOR_REGEX;
 
     if sep_regex.is_match(&cur_title) {
-        title_had_hierarchical_separators = regex::Regex::new(r"\s[\\//>»]\s")
-            .unwrap()
-            .is_match(&cur_title);
+        title_had_hierarchical_separators = HIERARCHICAL_SEPARATOR_REGEX.is_match(&cur_title);
 
         let sep_matches: Vec<_> = sep_regex.find_iter(&orig_title).collect();
         if let Some(last_sep) = sep_matches.last() {
             cur_title = orig_title[..last_sep.start()].to_string();
             if word_count(&cur_title) < 3 {
-                let first_sep_regex =
-                    regex::Regex::new(r"(?i)^[^\|\-–—\\//>»]*[\|\-–—\\//>»]").unwrap();
-                cur_title = first_sep_regex.replace(&orig_title, "").to_string();
+                cur_title = LEADING_SEGMENT_REGEX.replace(&orig_title, "").to_string();
             }
         }
     } else if cur_title.contains(": ") {

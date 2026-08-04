@@ -6,7 +6,7 @@ use ego_tree::NodeId;
 use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use scraper::{ElementRef, Html, Node as ScraperNode, Selector};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// Clean and post-process extracted article content (light version)
 ///
@@ -49,28 +49,35 @@ fn fix_relative_urls_in_html(html: &str, _base_url: &str) -> String {
 fn remove_nav_like_sections(html: &str) -> String {
     static NAV_REGEX: Lazy<Regex> =
         Lazy::new(|| Regex::new(r"(?is)<nav\b[^>]*?>.*?</nav>").unwrap());
+    static NAV_WRAPPER_REGEXES: Lazy<Vec<Regex>> = Lazy::new(|| {
+        let tags = ["div", "section", "ul", "ol"];
+        // Note: "widget" is intentionally excluded from this regex-based removal because
+        // page builders (Elementor, Divi, etc.) use "widget" in class names for ALL content
+        // containers. Widgets with negative class weight are handled by should_remove_dom_node
+        // which also considers content quality (link density, text length).
+        let keywords = ["nav", "navbar", "menu", "breadcrumbs", "sidebar"];
+
+        let mut regexes = Vec::with_capacity(tags.len() * keywords.len() * 2);
+        for tag in tags {
+            for keyword in keywords {
+                let class_pattern = format!(
+                    r#"(?is)<{tag}\b[^>]*?class="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#
+                );
+                let id_pattern =
+                    format!(r#"(?is)<{tag}\b[^>]*?id="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
+                regexes.extend(
+                    [class_pattern, id_pattern]
+                        .iter()
+                        .filter_map(|p| Regex::new(p).ok()),
+                );
+            }
+        }
+        regexes
+    });
 
     let mut result = NAV_REGEX.replace_all(html, "").to_string();
-
-    let tags = ["div", "section", "ul", "ol"];
-    // Note: "widget" is intentionally excluded from this regex-based removal because
-    // page builders (Elementor, Divi, etc.) use "widget" in class names for ALL content
-    // containers. Widgets with negative class weight are handled by should_remove_dom_node
-    // which also considers content quality (link density, text length).
-    let keywords = ["nav", "navbar", "menu", "breadcrumbs", "sidebar"];
-
-    for tag in tags {
-        for keyword in keywords {
-            let class_pattern =
-                format!(r#"(?is)<{tag}\b[^>]*?class="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
-            let re = Regex::new(&class_pattern).unwrap();
-            result = re.replace_all(&result, "").to_string();
-
-            let id_pattern =
-                format!(r#"(?is)<{tag}\b[^>]*?id="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
-            let re = Regex::new(&id_pattern).unwrap();
-            result = re.replace_all(&result, "").to_string();
-        }
+    for re in NAV_WRAPPER_REGEXES.iter() {
+        result = re.replace_all(&result, "").to_string();
     }
 
     result
@@ -124,9 +131,22 @@ fn remove_conditionally_regex(html: &str) -> String {
     result
 }
 
+/// Block-matching regex per tag cleaned by [`remove_conditionally_regex`].
+/// Only those five tags are ever passed in, so the set is fixed at compile time.
+static BLOCK_REGEXES: Lazy<HashMap<&'static str, Regex>> = Lazy::new(|| {
+    ["table", "ul", "ol", "div", "section"]
+        .into_iter()
+        .filter_map(|tag| {
+            let pattern = format!(r"(?is)<{tag}\b[^>]*?>.*?</{tag}>");
+            Regex::new(&pattern).ok().map(|re| (tag, re))
+        })
+        .collect()
+});
+
 fn remove_blocks_for_tag(html: &str, tag: &str) -> String {
-    let pattern = format!(r"(?is)<{tag}\b[^>]*?>.*?</{tag}>");
-    let re = Regex::new(&pattern).unwrap();
+    let Some(re) = BLOCK_REGEXES.get(tag) else {
+        return html.to_string();
+    };
 
     re.replace_all(html, |caps: &Captures| {
         let block = caps.get(0).map(|m| m.as_str()).unwrap_or_default();
@@ -416,7 +436,9 @@ fn parse_element(html: &str) -> Option<(&str, &str, &str, &str)> {
 
 /// Replace BRs in text/content (no wrapping element)
 fn replace_brs_in_content(content: &str) -> String {
-    let br_regex = regex::Regex::new(r"(?i)(<br\s*/?>(\s|&nbsp;?)*){2,}").unwrap();
+    static BR_RUN_REGEX: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?i)(<br\s*/?>(\s|&nbsp;?)*){2,}").unwrap());
+    let br_regex = &*BR_RUN_REGEX;
     if !br_regex.is_match(content) {
         return content.to_string();
     }
@@ -450,14 +472,17 @@ fn replace_brs_in_content(content: &str) -> String {
 pub fn prep_document(html: &str) -> String {
     let mut html = html.to_string();
 
-    let font_open_regex = regex::Regex::new(r"<font\b").unwrap();
-    html = font_open_regex.replace_all(&html, "<span").to_string();
+    static FONT_OPEN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"<font\b").unwrap());
+    static FONT_CLOSE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"</font>").unwrap());
+    static NOSCRIPT_REGEX: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?is)<noscript\b[^>]*>(.*?)</noscript>").unwrap());
+    static FORM_REGEX: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?i)<form\b[^>]*>[\s\S]*?</form>").unwrap());
 
-    let font_close_regex = regex::Regex::new(r"</font>").unwrap();
-    html = font_close_regex.replace_all(&html, "</span>").to_string();
+    html = FONT_OPEN_REGEX.replace_all(&html, "<span").to_string();
+    html = FONT_CLOSE_REGEX.replace_all(&html, "</span>").to_string();
 
-    let noscript_regex = regex::Regex::new(r"(?is)<noscript\b[^>]*>(.*?)</noscript>").unwrap();
-    html = noscript_regex
+    html = NOSCRIPT_REGEX
         .replace_all(&html, |caps: &regex::Captures| {
             let inner = &caps[1];
             if inner.contains("<img") {
@@ -468,8 +493,7 @@ pub fn prep_document(html: &str) -> String {
         })
         .to_string();
 
-    let form_regex = regex::Regex::new(r"(?i)<form\b[^>]*>[\s\S]*?</form>").unwrap();
-    html = form_regex.replace_all(&html, "").to_string();
+    html = FORM_REGEX.replace_all(&html, "").to_string();
 
     html
 }

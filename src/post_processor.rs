@@ -248,56 +248,72 @@ fn normalize_whitespace(html: &str) -> String {
 /// Removes: forms, fieldsets, footer, aside, object, embed, iframe,
 /// input, textarea, select, button
 fn remove_unwanted_elements(html: &str) -> String {
-    let mut result = html.to_string();
-    let tags = vec![
-        ("form", r"(?is)<form\b[^>]*?>.*?</form>"),
-        ("fieldset", r"(?is)<fieldset\b[^>]*?>.*?</fieldset>"),
-        ("footer", r"(?is)<footer\b[^>]*?>.*?</footer>"),
-        ("aside", r"(?is)<aside\b[^>]*?>.*?</aside>"),
-        ("object", r"(?is)<object\b[^>]*?>.*?</object>"),
-        (
-            "embed",
+    static UNWANTED_TAG_REGEXES: Lazy<Vec<Regex>> = Lazy::new(|| {
+        [
+            r"(?is)<form\b[^>]*?>.*?</form>",
+            r"(?is)<fieldset\b[^>]*?>.*?</fieldset>",
+            r"(?is)<footer\b[^>]*?>.*?</footer>",
+            r"(?is)<aside\b[^>]*?>.*?</aside>",
+            r"(?is)<object\b[^>]*?>.*?</object>",
             r"(?is)<embed\b[^>]*?>.*?</embed>|<embed\b[^>]*?/?>",
-        ),
-        ("iframe", r"(?is)<iframe\b[^>]*?>.*?</iframe>"),
-        (
-            "input",
+            r"(?is)<iframe\b[^>]*?>.*?</iframe>",
             r"(?is)<input\b[^>]*?>.*?</input>|<input\b[^>]*?/?>",
-        ),
-        ("textarea", r"(?is)<textarea\b[^>]*?>.*?</textarea>"),
-        ("select", r"(?is)<select\b[^>]*?>.*?</select>"),
-        ("button", r"(?is)<button\b[^>]*?>.*?</button>"),
-        ("link", r"(?is)<link\b[^>]*?>.*?</link>|<link\b[^>]*?/?>"),
-    ];
+            r"(?is)<textarea\b[^>]*?>.*?</textarea>",
+            r"(?is)<select\b[^>]*?>.*?</select>",
+            r"(?is)<button\b[^>]*?>.*?</button>",
+            r"(?is)<link\b[^>]*?>.*?</link>|<link\b[^>]*?/?>",
+        ]
+        .iter()
+        .filter_map(|pattern| Regex::new(pattern).ok())
+        .collect()
+    });
 
-    for (_name, pattern) in tags {
-        let re = Regex::new(pattern).unwrap();
+    let mut result = html.to_string();
+    for re in UNWANTED_TAG_REGEXES.iter() {
         result = re.replace_all(&result, "").to_string();
     }
 
     result
 }
 
+/// Build the class/id removal matrix for a fixed set of tags and keywords.
+///
+/// Both orderings below produce `class` before `id` per (tag, keyword) pair,
+/// matching the order the loops used when these were compiled per call.
+fn build_wrapper_regexes(tags: &[&str], keywords: &[&str]) -> Vec<Regex> {
+    let mut regexes = Vec::with_capacity(tags.len() * keywords.len() * 2);
+
+    for tag in tags {
+        for keyword in keywords {
+            let class_pattern =
+                format!(r#"(?is)<{tag}\b[^>]*?class="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
+            let id_pattern =
+                format!(r#"(?is)<{tag}\b[^>]*?id="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
+            regexes.extend(
+                [class_pattern, id_pattern]
+                    .iter()
+                    .filter_map(|p| Regex::new(p).ok()),
+            );
+        }
+    }
+
+    regexes
+}
+
 /// Remove share buttons and social widgets
 ///
 /// Removes elements with "share" or "social" in their class/id
 fn remove_share_elements(html: &str) -> String {
+    static SHARE_REGEXES: Lazy<Vec<Regex>> = Lazy::new(|| {
+        build_wrapper_regexes(
+            &["div", "span", "aside", "section"],
+            &["share", "social", "sharedaddy"],
+        )
+    });
+
     let mut result = html.to_string();
-    let tags = vec!["div", "span", "aside", "section"];
-    let keywords = vec!["share", "social", "sharedaddy"];
-
-    for tag in &tags {
-        for keyword in &keywords {
-            let class_pattern =
-                format!(r#"(?is)<{tag}\b[^>]*?class="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
-            let re = Regex::new(&class_pattern).unwrap();
-            result = re.replace_all(&result, "").to_string();
-
-            let id_pattern =
-                format!(r#"(?is)<{tag}\b[^>]*?id="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
-            let re = Regex::new(&id_pattern).unwrap();
-            result = re.replace_all(&result, "").to_string();
-        }
+    for re in SHARE_REGEXES.iter() {
+        result = re.replace_all(&result, "").to_string();
     }
 
     result
@@ -305,27 +321,18 @@ fn remove_share_elements(html: &str) -> String {
 
 /// Remove navigation lists and menu sections
 fn remove_navigation_elements(html: &str) -> String {
-    let mut result = html.to_string();
-
     static NAV_REGEX: Lazy<Regex> =
         Lazy::new(|| Regex::new(r"(?is)<nav\b[^>]*?>.*?</nav>").unwrap());
-    result = NAV_REGEX.replace_all(&result, "").to_string();
+    static NAV_WRAPPER_REGEXES: Lazy<Vec<Regex>> = Lazy::new(|| {
+        build_wrapper_regexes(
+            &["div", "section", "ul", "ol"],
+            &["nav", "navbar", "menu", "breadcrumbs"],
+        )
+    });
 
-    let tags = vec!["div", "section", "ul", "ol"];
-    let keywords = vec!["nav", "navbar", "menu", "breadcrumbs"];
-
-    for tag in &tags {
-        for keyword in &keywords {
-            let class_pattern =
-                format!(r#"(?is)<{tag}\b[^>]*?class="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
-            let re = Regex::new(&class_pattern).unwrap();
-            result = re.replace_all(&result, "").to_string();
-
-            let id_pattern =
-                format!(r#"(?is)<{tag}\b[^>]*?id="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
-            let re = Regex::new(&id_pattern).unwrap();
-            result = re.replace_all(&result, "").to_string();
-        }
+    let mut result = NAV_REGEX.replace_all(html, "").to_string();
+    for re in NAV_WRAPPER_REGEXES.iter() {
+        result = re.replace_all(&result, "").to_string();
     }
 
     result
