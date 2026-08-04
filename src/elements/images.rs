@@ -196,7 +196,10 @@ fn is_entity_start(s: &str) -> bool {
     let body = &window[..semi_offset];
 
     if let Some(numeric) = body.strip_prefix('#') {
-        if let Some(hex) = numeric.strip_prefix('x').or_else(|| numeric.strip_prefix('X')) {
+        if let Some(hex) = numeric
+            .strip_prefix('x')
+            .or_else(|| numeric.strip_prefix('X'))
+        {
             return !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit());
         }
         return !numeric.is_empty() && numeric.chars().all(|c| c.is_ascii_digit());

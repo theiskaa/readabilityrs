@@ -892,7 +892,10 @@ fn is_viable_best_candidate(element: ElementRef, score: f64) -> bool {
 /// Matches any lowercased name starting with `"on"` and longer than 2 characters,
 /// so it also rejects the rare legitimate attribute literally named `"on"`.
 fn is_event_handler_attr(name: &str) -> bool {
-    name.len() > 2 && name.get(0..2).is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
+    name.len() > 2
+        && name
+            .get(0..2)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
 }
 
 /// Check whether a URL value uses a dangerous scheme (`javascript:`, `vbscript:`, `data:`),
@@ -1095,15 +1098,24 @@ mod tests {
         // `test_attribute_values_are_escaped`.
         let reparsed = Html::parse_fragment(&content);
         let img_sel = Selector::parse("img").unwrap();
-        let img = reparsed.select(&img_sel).next().expect("img should survive sanitization");
+        let img = reparsed
+            .select(&img_sel)
+            .next()
+            .expect("img should survive sanitization");
         assert_eq!(
             img.value().attr("src").unwrap(),
             "data:image/png;base64,iVBORw0KGgo="
         );
 
         let a_sel = Selector::parse("a").unwrap();
-        let a = reparsed.select(&a_sel).next().expect("link should survive sanitization");
-        assert_eq!(a.value().attr("href").unwrap(), "  \tHTTPS://example.com/page");
+        let a = reparsed
+            .select(&a_sel)
+            .next()
+            .expect("link should survive sanitization");
+        assert_eq!(
+            a.value().attr("href").unwrap(),
+            "  \tHTTPS://example.com/page"
+        );
     }
 
     #[test]
