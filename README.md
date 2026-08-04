@@ -91,7 +91,9 @@ let options = ReadabilityOptions::builder()
 let readability = Readability::new(&html, None, Some(options))?;
 ```
 
-Four further options exist on the builder but are not yet wired into the parser and currently have no effect: `max_elems_to_parse`, `keep_classes`, `classes_to_preserve`, and `allowed_video_regex`. Do not rely on `max_elems_to_parse` as an input-size guard.
+`max_elems_to_parse` caps how many elements a document may contain before extraction refuses to run. It defaults to `0`, meaning unlimited. The count happens after parsing, so it bounds extraction work rather than parsing work; bound the input length too if you accept arbitrary pages.
+
+Three further options exist on the builder but are not wired into the parser and have no effect. They are deprecated rather than removed, since removing them would break the API: `keep_classes`, `classes_to_preserve`, and `allowed_video_regex`.
 
 ## Error handling
 

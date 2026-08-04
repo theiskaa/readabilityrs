@@ -17,7 +17,6 @@
 //! let options = ReadabilityOptions::builder()
 //!     .char_threshold(300)
 //!     .nb_top_candidates(10)
-//!     .keep_classes(true)
 //!     .build();
 //!
 //! let readability = Readability::new(html, None, Some(options)).unwrap();
@@ -69,11 +68,17 @@ pub struct ReadabilityOptions {
 
     /// Maximum number of elements to parse.
     ///
-    /// **Not implemented.** The value is stored but never read, so setting it has
-    /// no effect and it does not bound the work done on a large or hostile
-    /// document. Do not rely on it as a size guard.
+    /// Counted on the parsed document before any scoring runs. A document with
+    /// more elements than this is rejected with
+    /// [`ReadabilityError::MaxElementsExceeded`](crate::ReadabilityError::MaxElementsExceeded),
+    /// which [`Readability::parse`](crate::Readability::parse) surfaces as `None`.
     ///
-    /// Default: `0`
+    /// This bounds extraction work, not parsing: the document has already been
+    /// parsed by the time the count happens, so it does not protect against a
+    /// document large enough to be a problem to parse at all. Bound the input
+    /// length as well if you accept arbitrary pages.
+    ///
+    /// Default: `0` (unlimited)
     pub max_elems_to_parse: usize,
 
     /// Number of top candidates to consider when analyzing content.
@@ -100,6 +105,10 @@ pub struct ReadabilityOptions {
     /// nothing to preserve and this list is not consulted.
     ///
     /// Default: `vec!["page"]`
+    #[deprecated(
+        since = "0.1.4",
+        note = "has no effect: class attributes are never stripped"
+    )]
     pub classes_to_preserve: Vec<String>,
 
     /// Keep all CSS classes in the output HTML.
@@ -107,6 +116,7 @@ pub struct ReadabilityOptions {
     /// **Not implemented.** Classes are always kept regardless of this setting.
     ///
     /// Default: `false`
+    #[deprecated(since = "0.1.4", note = "has no effect: classes are always kept")]
     pub keep_classes: bool,
 
     /// Disable JSON-LD metadata extraction.
@@ -123,18 +133,10 @@ pub struct ReadabilityOptions {
     /// overriding it here has no effect.
     ///
     /// Default: `None`
-    ///
-    /// ## Example
-    ///
-    /// ```rust
-    /// use readabilityrs::ReadabilityOptions;
-    /// use regex::Regex;
-    ///
-    /// let video_regex = Regex::new(r"(?i)myvideoplatform\.com").unwrap();
-    /// let options = ReadabilityOptions::builder()
-    ///     .allowed_video_regex(video_regex)
-    ///     .build();
-    /// ```
+    #[deprecated(
+        since = "0.1.4",
+        note = "has no effect: video detection always uses the built-in pattern"
+    )]
     pub allowed_video_regex: Option<Regex>,
 
     /// Modifier for link density scoring.
@@ -211,6 +213,9 @@ pub struct ReadabilityOptions {
 }
 
 impl Default for ReadabilityOptions {
+    // The deprecated fields still have to be populated for the struct to be
+    // constructible; deprecation is a signal to callers, not to this impl.
+    #[allow(deprecated)]
     fn default() -> Self {
         Self {
             debug: false,
@@ -300,12 +305,17 @@ impl ReadabilityOptionsBuilder {
     }
 
     /// Set classes to preserve
+    #[deprecated(
+        since = "0.1.4",
+        note = "has no effect: class attributes are never stripped"
+    )]
     pub fn classes_to_preserve(mut self, classes: Vec<String>) -> Self {
         self.classes_to_preserve = Some(classes);
         self
     }
 
     /// Keep all CSS classes
+    #[deprecated(since = "0.1.4", note = "has no effect: classes are always kept")]
     pub fn keep_classes(mut self, keep: bool) -> Self {
         self.keep_classes = Some(keep);
         self
@@ -318,6 +328,10 @@ impl ReadabilityOptionsBuilder {
     }
 
     /// Set allowed video regex
+    #[deprecated(
+        since = "0.1.4",
+        note = "has no effect: video detection always uses the built-in pattern"
+    )]
     pub fn allowed_video_regex(mut self, regex: Regex) -> Self {
         self.allowed_video_regex = Some(regex);
         self
@@ -386,6 +400,8 @@ impl ReadabilityOptionsBuilder {
     }
 
     /// Build the ReadabilityOptions
+    // Same as `Default`: the deprecated fields must still be carried across.
+    #[allow(deprecated)]
     pub fn build(self) -> ReadabilityOptions {
         let defaults = ReadabilityOptions::default();
         ReadabilityOptions {
