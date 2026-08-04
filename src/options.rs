@@ -69,11 +69,11 @@ pub struct ReadabilityOptions {
 
     /// Maximum number of elements to parse.
     ///
-    /// This is a safety limit to prevent processing extremely large documents
-    /// that could consume excessive memory or CPU time. Set to 0 to disable
-    /// the limit.
+    /// **Not implemented.** The value is stored but never read, so setting it has
+    /// no effect and it does not bound the work done on a large or hostile
+    /// document. Do not rely on it as a size guard.
     ///
-    /// Default: `0` (no limit)
+    /// Default: `0`
     pub max_elems_to_parse: usize,
 
     /// Number of top candidates to consider when analyzing content.
@@ -96,16 +96,15 @@ pub struct ReadabilityOptions {
 
     /// CSS classes to preserve during cleaning.
     ///
-    /// By default, the parser removes most CSS classes during cleaning. Classes
-    /// in this list will be preserved in the output HTML.
+    /// **Not implemented.** Class attributes are never stripped, so there is
+    /// nothing to preserve and this list is not consulted.
     ///
     /// Default: `vec!["page"]`
     pub classes_to_preserve: Vec<String>,
 
     /// Keep all CSS classes in the output HTML.
     ///
-    /// When `true`, preserves all CSS classes instead of removing them.
-    /// This can be useful if you need to apply custom styling to the output.
+    /// **Not implemented.** Classes are always kept regardless of this setting.
     ///
     /// Default: `false`
     pub keep_classes: bool,
@@ -120,10 +119,10 @@ pub struct ReadabilityOptions {
 
     /// Custom regex for allowed video URLs.
     ///
-    /// Override the default video platform detection with a custom regex.
-    /// By default, the parser recognizes common platforms like YouTube, Vimeo, etc.
+    /// **Not implemented.** Video detection always uses the built-in pattern, so
+    /// overriding it here has no effect.
     ///
-    /// Default: `None` (uses built-in regex)
+    /// Default: `None`
     ///
     /// ## Example
     ///
@@ -192,16 +191,22 @@ pub struct ReadabilityOptions {
     pub markdown_options: Option<MarkdownOptions>,
 
     /// Whether to strip high-risk markup during serialization of the
-    /// extracted content: event-handler attributes (`on*`) and `href`/`src`
-    /// values with `javascript:`, `vbscript:`, or `data:` schemes
-    /// (`data:image/*` is allowed).
+    /// extracted content:
+    ///
+    /// - `script`, `style`, `iframe`, `object`, `embed`, `form`, `noscript`
+    ///   and `template` elements are dropped whole, children included,
+    /// - event-handler attributes (`on*`) are dropped,
+    /// - `href`/`src` values with `javascript:`, `vbscript:`, or `data:`
+    ///   schemes are dropped (`data:image/*` is allowed),
+    /// - comments are dropped, since a body containing `-->` closes the
+    ///   comment early and turns the remainder into live markup.
     ///
     /// Default is `false`, matching Readability.js: the extracted HTML is
     /// NOT sanitized and must be treated as untrusted input by consumers.
     /// This option is a harm reducer, not a substitute for a real HTML
     /// sanitizer. Note the `data:image/*` allowance also permits
     /// `data:image/svg+xml`, and SVG can carry embedded script in some
-    /// rendering contexts.
+    /// rendering contexts. It also does not apply to `markdown_content`.
     pub sanitize_content: bool,
 }
 

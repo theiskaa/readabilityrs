@@ -1,25 +1,18 @@
-//! # ReadabilityRS
+//! # readabilityrs
 //!
-//! A Rust port of Mozilla's Readability library for extracting article content from web pages.
+//! Pulls the article out of a web page. This is a Rust port of
+//! [Mozilla's Readability.js](https://github.com/mozilla/readability), the algorithm
+//! behind Firefox Reader View: give it a page of HTML and it returns the title,
+//! byline, body, excerpt, site name, language, and publication time, leaving
+//! navigation, ads, and related-article rails behind.
 //!
-//! This library is a faithful port of the [Mozilla Readability](https://github.com/mozilla/readability)
-//! JavaScript library, used in Firefox Reader View.
+//! It passes 119 of the 130 cases in Mozilla's test suite. The 11 differences are
+//! editorial rather than failures, and each is named in `tests/mozilla_test_suite.rs`.
 //!
-//! ## Overview
-//!
-//! ReadabilityRS provides intelligent extraction of main article content from HTML documents,
-//! removing clutter such as advertisements, navigation elements, and other non-essential content.
-//! It also extracts metadata like article title, author (byline), publish date, and more.
-//!
-//! ## Key Features
-//!
-//! - **Content Extraction**: Intelligently identifies and extracts main article content
-//! - **Markdown Output**: Optional HTML-to-Markdown conversion with content standardization
-//! - **Metadata Extraction**: Extracts title, author, description, site name, language, and publish date
-//! - **JSON-LD Support**: Parses structured data from JSON-LD markup
-//! - **Multiple Retry Strategies**: Uses adaptive algorithms to handle various page layouts
-//! - **Customizable Options**: Configure thresholds, scoring, and behavior
-//! - **Pre-flight Check**: Quick check to determine if a page is likely readable
+//! Output is cleaned HTML by default, in [`Article::content`]. Enabling
+//! [`ReadabilityOptions::output_markdown`] additionally produces Markdown, after a
+//! standardization pass that rewrites vendor-specific markup (highlighted code,
+//! lazy-loaded images, footnotes, MathJax and KaTeX output) into canonical form.
 //!
 //! ## Basic Usage
 //!
@@ -51,7 +44,6 @@
 //! let options = ReadabilityOptions::builder()
 //!     .char_threshold(300)
 //!     .nb_top_candidates(10)
-//!     .keep_classes(true)
 //!     .build();
 //!
 //! let readability = Readability::new(html, None, Some(options)).unwrap();
@@ -100,29 +92,33 @@
 //!
 //! ## Security
 //!
-//! `article.content` is derived from untrusted input (arbitrary web pages) and is
-//! **not sanitized by default**, matching Mozilla's Readability.js contract: every
-//! attribute of every kept element, including event handlers (`onerror`, `onclick`, …)
-//! and dangerous URL schemes (`javascript:`, `data:text/html`, …), survives into the
-//! output HTML. Consumers who render `article.content` into a webview or browser DOM
-//! must sanitize it themselves, for example with the [`ammonia`](https://crates.io/crates/ammonia)
-//! crate. As a partial mitigation, enabling [`ReadabilityOptions::sanitize_content`]
-//! strips event-handler attributes and the highest-risk URL schemes during
-//! serialization — it is a harm reducer, not a substitute for a real HTML sanitizer.
+//! [`Article::content`] comes from untrusted input and is **not sanitized by
+//! default**. This matches the Readability.js contract: every attribute of every
+//! element that survives extraction is written back out, including event handlers
+//! such as `onerror` and `onclick`, and URL schemes such as `javascript:` and
+//! `data:text/html`. Anything that renders the output in a webview or browser DOM
+//! has to sanitize it first, for example with
+//! [`ammonia`](https://crates.io/crates/ammonia).
+//!
+//! Setting [`ReadabilityOptions::sanitize_content`] drops script-bearing and
+//! content-loading elements whole, along with event-handler attributes, the
+//! highest-risk URL schemes, and comments. It reduces harm and is not a substitute
+//! for a real sanitizer: the allowed elements keep every other attribute they
+//! carry, and none of it applies to [`Article::markdown_content`].
 //!
 //! ## Algorithm
 //!
-//! The extraction algorithm works in several phases. First, scripts and styles are removed
-//! to prepare the document. Then potential content containers are identified throughout the page.
-//! These candidates are scored based on various content signals like paragraph count, text length,
-//! and link density. The best candidate is selected using adaptive strategies with multiple fallback
-//! approaches. Nearby high-quality content is aggregated by examining sibling elements. Finally,
-//! the extracted content goes through post-processing to clean and finalize the output.
+//! Extraction runs in phases. The document is preprocessed first: scripts and styles
+//! are stripped, `<noscript>` wrappers around lazy-loaded images are unwrapped, and
+//! deprecated elements are normalized. Candidate containers are then scored by tag
+//! type, text density, link density, and class and id patterns. The highest-scoring
+//! subtree becomes the article body, and sibling elements that look like part of the
+//! same article are pulled in with it. Post-processing cleans the result.
 //!
-//! ## Compatibility
-//!
-//! This implementation strives to match the behavior of Mozilla's Readability.js as closely
-//! as possible while leveraging Rust's type system and safety guarantees.
+//! When a pass produces too little text, it is retried with looser flags: first
+//! without the unlikely-candidate filter, then without class weighting, then without
+//! conditional cleaning. If every attempt stays under the character threshold, the
+//! longest one is returned.
 
 mod article;
 mod cleaner;

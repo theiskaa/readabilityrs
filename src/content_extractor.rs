@@ -898,13 +898,32 @@ fn is_event_handler_attr(name: &str) -> bool {
             .is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
 }
 
+/// Check whether an element must never be emitted when sanitizing.
+///
+/// These elements execute script, load external content, or collect input, so no
+/// attribute-level filtering makes them safe to hand to a browser. Cleaning
+/// already drops most of them earlier in the pipeline; this is the backstop for
+/// anything a cleaning pass misses.
+///
+/// Matched case-insensitively rather than relying on html5ever lowercasing, which
+/// it does for HTML but not for foreign (SVG/MathML) content.
+fn is_unsafe_element(tag: &str) -> bool {
+    const UNSAFE_TAGS: [&str; 8] = [
+        "script", "style", "iframe", "object", "embed", "form", "noscript", "template",
+    ];
+
+    UNSAFE_TAGS
+        .iter()
+        .any(|unsafe_tag| tag.eq_ignore_ascii_case(unsafe_tag))
+}
+
 /// Check whether a URL value uses a dangerous scheme (`javascript:`, `vbscript:`, `data:`),
 /// allowing `data:image/*` since lazy-loading placeholders in the wild rely on it.
 ///
 /// Never slices `value` at an index computed from a transformed copy: the scheme is
 /// isolated with `split_once` on the original string. The scheme segment is then
 /// stripped of whitespace/control chars before comparison (not just its prefix),
-/// because browsers do the same while parsing a URL — otherwise a scheme like
+/// because browsers do the same while parsing a URL; otherwise a scheme like
 /// `java\tscript:` would bypass a filter that only checks the raw segment.
 fn is_dangerous_url(value: &str) -> bool {
     let trimmed = value.trim_start_matches(|c: char| c.is_whitespace() || c.is_control());
@@ -947,8 +966,9 @@ fn is_dangerous_url(value: &str) -> bool {
 /// Additionally, this function implements DIV→P transformation: DIVs without
 /// block-level children are converted to P tags to match Mozilla's behavior.
 ///
-/// When `sanitize` is `true`, event-handler attributes and dangerous URL schemes
-/// in `href`/`src`/`xlink:href` are dropped; see [`is_event_handler_attr`] and
+/// When `sanitize` is `true`, unsafe elements are dropped whole, and event-handler
+/// attributes and dangerous URL schemes in `href`/`src`/`xlink:href` are dropped
+/// from the rest; see [`is_unsafe_element`], [`is_event_handler_attr`] and
 /// [`is_dangerous_url`]. This is an opt-in harm reducer, not a full sanitizer.
 fn element_to_html(element: ElementRef, sanitize: bool) -> String {
     use scraper::node::Node;
@@ -958,6 +978,10 @@ fn element_to_html(element: ElementRef, sanitize: bool) -> String {
 
     let elem_data = element.value();
     let original_tag_name = elem_data.name();
+
+    if sanitize && is_unsafe_element(original_tag_name) {
+        return String::new();
+    }
 
     let tag_name = if should_convert_div_to_p(element) {
         "p"
@@ -1000,7 +1024,10 @@ fn element_to_html(element: ElementRef, sanitize: bool) -> String {
             Node::Text(text) => {
                 html.push_str(&escape(&text.text).to_string());
             }
-            Node::Comment(comment) => {
+            // A comment body containing `-->` closes the comment early, so the rest
+            // of it is parsed as markup. Nothing downstream reads comments, so when
+            // sanitizing just drop them rather than trying to encode them.
+            Node::Comment(comment) if !sanitize => {
                 html.push_str(&format!("<!--{}-->", comment.comment));
             }
             _ => {}
@@ -1146,7 +1173,7 @@ mod tests {
 
         // Browsers strip ASCII tab/newline/CR and C0 controls while parsing a URL,
         // so a scheme with embedded whitespace/control chars still reaches the page
-        // as `javascript:` — the filter must normalize the scheme, not just its prefix.
+        // as `javascript:`, so the filter must normalize the scheme, not just its prefix.
         assert!(is_dangerous_url("java\tscript:alert(1)"));
         assert!(is_dangerous_url("java\nscript:alert(1)"));
         assert!(is_dangerous_url("java\rscript:alert(1)"));
@@ -1156,6 +1183,106 @@ mod tests {
         assert!(!is_dangerous_url("https://example.com/İstanbul/🎉"));
         assert!(!is_dangerous_url("İ"));
         assert!(!is_dangerous_url("🎉:notreal"));
+    }
+
+    /// A full article page carrying one script, closed with the given end-tag
+    /// spelling. The tokenizer accepts whitespace before the `>`, so every
+    /// variant here is a real script as far as a browser is concerned.
+    fn article_with_script(end_tag: &str) -> String {
+        let paragraphs: String = (1..=4)
+            .map(|i| {
+                format!(
+                    "<p>Paragraph {i} of the article body, long enough on its own to clear the \
+                     character threshold so the scoring algorithm selects this article element \
+                     as the winning candidate rather than something else on the page.</p>"
+                )
+            })
+            .collect();
+
+        format!(
+            "<html><head><title>Scripted Article</title></head><body><article>\
+             {paragraphs}<script>alert(1){end_tag}\n</article></body></html>"
+        )
+    }
+
+    fn parse_content(html: &str, sanitize: bool) -> String {
+        let options = ReadabilityOptions::builder()
+            .char_threshold(100)
+            .sanitize_content(sanitize)
+            .build();
+        crate::Readability::new(html, None, Some(options))
+            .unwrap()
+            .parse()
+            .and_then(|a| a.content)
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn test_script_removed_for_every_end_tag_spelling() {
+        let end_tags = [
+            "</script>",
+            "</script >",
+            "</script\n>",
+            "</script\t>",
+            "</SCRIPT >",
+        ];
+
+        for end_tag in end_tags {
+            let html = article_with_script(end_tag);
+
+            for sanitize in [false, true] {
+                let content = parse_content(&html, sanitize);
+                assert!(
+                    !content.contains("<script"),
+                    "end tag {end_tag:?}, sanitize={sanitize}: script element survived"
+                );
+                assert!(
+                    !content.contains("alert(1)"),
+                    "end tag {end_tag:?}, sanitize={sanitize}: script body survived"
+                );
+                assert!(
+                    content.contains("Paragraph 1 of the article body"),
+                    "end tag {end_tag:?}, sanitize={sanitize}: article body was lost"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_unsafe_element() {
+        for tag in [
+            "script", "style", "iframe", "object", "embed", "form", "noscript", "template",
+        ] {
+            assert!(is_unsafe_element(tag), "{tag} should be denylisted");
+            assert!(
+                is_unsafe_element(&tag.to_uppercase()),
+                "{tag} should match case-insensitively"
+            );
+        }
+
+        for tag in ["p", "div", "article", "img", "a", "table", "span"] {
+            assert!(!is_unsafe_element(tag), "{tag} should be allowed");
+        }
+    }
+
+    #[test]
+    fn test_sanitize_content_drops_comments() {
+        let html = r#"<html><body><article>
+            <p>This is a substantial paragraph with enough text to satisfy readability thresholds. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+            <p>Another paragraph with plenty of content to make sure the section is picked up as the article body by the scoring algorithm.<!-- --><img src=x onerror=alert(1)> --></p>
+            </article></body></html>"#;
+
+        let document = Html::parse_document(html);
+        let options = ReadabilityOptions::builder()
+            .char_threshold(100)
+            .sanitize_content(true)
+            .build();
+        let content = grab_article(&document, &options).unwrap().unwrap();
+
+        // The comment body closes itself early, so its payload would become live
+        // markup if the comment were emitted verbatim.
+        assert!(!content.contains("<!--"));
+        assert!(!content.contains("onerror"));
     }
 
     #[test]

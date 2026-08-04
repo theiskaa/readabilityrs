@@ -23,7 +23,7 @@ Please give a reasonable window to investigate and address the issue before any 
 The input is hostile by assumption. The output is not trusted either, and that is the part most callers get wrong:
 
 - **Extracted HTML is not sanitized.** `Article::content` is assembled from the page's own elements and attributes. Event handlers such as `onerror` and `onclick`, and URL schemes such as `javascript:` and `data:text/html`, are carried through by default. This matches Mozilla's Readability.js, which also leaves sanitization to the consumer. **If you render extracted content in a webview or browser DOM, sanitize it first**, for example with [`ammonia`](https://crates.io/crates/ammonia).
-- **`sanitize_content` is a harm reducer, not a sanitizer.** Enabling it drops event-handler attributes and the highest-risk URL schemes during serialization. It filters attributes, not whole elements, and it does not apply to `markdown_content`. Do not treat it as a security boundary.
+- **`sanitize_content` is a harm reducer, not a sanitizer.** Enabling it drops script-bearing and content-loading elements whole (`script`, `style`, `iframe`, `object`, `embed`, `form`, `noscript`, `template`), event-handler attributes, the highest-risk URL schemes, and comments. Everything else keeps every attribute it carries, and none of it applies to `markdown_content`. Do not treat it as a security boundary.
 - **`markdown_content` is untrusted too.** Link and image destinations come from the page. Markdown rendered to HTML by a downstream renderer needs the same care as the HTML output.
 - **This crate does no I/O.** It takes a `&str` and returns a struct. It opens no files, resolves no DNS, and makes no network requests, so there is no SSRF or path-traversal surface. A base URL, if supplied, is parsed and validated but never fetched.
 
@@ -49,6 +49,6 @@ If you are looking for where the sharp edges are:
 ## What is not a vulnerability
 
 - Unsanitized HTML in `Article::content`. That is the documented contract, stated above and in the crate docs. The fix is to sanitize downstream.
-- `sanitize_content` failing to remove something it does not claim to remove. It filters attributes, not elements.
+- `sanitize_content` failing to remove something it does not claim to remove. Its scope is listed above, and an allowed element keeping a benign attribute is not a finding.
 - Poor extraction quality, a wrong byline, or a missed paragraph. Those are ordinary bugs. Please do open a public issue for them.
 - Anything requiring you to feed the library your own hostile document on your own machine. The threat model is untrusted input reaching a service, not self-inflicted input.
