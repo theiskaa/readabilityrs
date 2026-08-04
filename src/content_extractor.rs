@@ -631,7 +631,7 @@ fn extract_article_content(
     document: &Html,
     best_candidate_id: String,
     all_scores: &HashMap<String, f64>,
-    _options: &ReadabilityOptions,
+    options: &ReadabilityOptions,
 ) -> Result<String> {
     let Some(best_candidate) = find_element_by_id(document, &best_candidate_id) else {
         return Ok(String::new());
@@ -648,7 +648,7 @@ fn extract_article_content(
     let mut article_content = Vec::new();
     let Some(parent) = best_candidate.parent() else {
         // No parent, just return the best candidate
-        let html = element_to_html(best_candidate);
+        let html = element_to_html(best_candidate, options.sanitize_content);
         let html = crate::cleaner::replace_brs(&html);
         return Ok(html);
     };
@@ -689,7 +689,7 @@ fn extract_article_content(
         };
 
         if should_include {
-            let mut sibling_html = element_to_html(sibling);
+            let mut sibling_html = element_to_html(sibling, options.sanitize_content);
             sibling_html = crate::cleaner::replace_brs(&sibling_html);
 
             if !sibling_html.trim().is_empty() {
@@ -890,6 +890,54 @@ fn is_viable_best_candidate(element: ElementRef, score: f64) -> bool {
     true
 }
 
+/// Check whether an attribute name is an event-handler attribute (`onclick`, `onerror`, …).
+///
+/// Matches any lowercased name starting with `"on"` and longer than 2 characters,
+/// so it also rejects the rare legitimate attribute literally named `"on"`.
+fn is_event_handler_attr(name: &str) -> bool {
+    name.len() > 2 && name.get(0..2).is_some_and(|prefix| prefix.eq_ignore_ascii_case("on"))
+}
+
+/// Check whether a URL value uses a dangerous scheme (`javascript:`, `vbscript:`, `data:`),
+/// allowing `data:image/*` since lazy-loading placeholders in the wild rely on it.
+///
+/// Never slices `value` at an index computed from a transformed copy: the scheme is
+/// isolated with `split_once` on the original string. The scheme segment is then
+/// stripped of whitespace/control chars before comparison (not just its prefix),
+/// because browsers do the same while parsing a URL — otherwise a scheme like
+/// `java\tscript:` would bypass a filter that only checks the raw segment.
+fn is_dangerous_url(value: &str) -> bool {
+    let trimmed = value.trim_start_matches(|c: char| c.is_whitespace() || c.is_control());
+
+    let Some((raw_scheme, rest)) = trimmed.split_once(':') else {
+        return false;
+    };
+
+    // A "scheme" containing '/', '?', or '#' isn't a scheme at all (e.g. a relative
+    // or protocol-relative URL that happens to contain a colon later on).
+    if raw_scheme.chars().any(|c| matches!(c, '/' | '?' | '#')) {
+        return false;
+    }
+
+    // Browsers strip ASCII tab/newline and other whitespace/control chars while
+    // parsing a URL, so `java\tscript:` reaches the page as `javascript:`. Compare
+    // on the stripped form rather than the raw scheme segment to catch this bypass.
+    let scheme: String = raw_scheme
+        .chars()
+        .filter(|c| !c.is_whitespace() && !c.is_control())
+        .collect();
+
+    if scheme.eq_ignore_ascii_case("javascript") || scheme.eq_ignore_ascii_case("vbscript") {
+        return true;
+    }
+
+    if scheme.eq_ignore_ascii_case("data") {
+        return !rest.starts_with("image/");
+    }
+
+    false
+}
+
 /// Serialize an element and its children to proper HTML (without ancestor tags)
 ///
 /// The scraper crate's `.html()` method includes ancestor tags as empty elements,
@@ -898,7 +946,11 @@ fn is_viable_best_candidate(element: ElementRef, score: f64) -> bool {
 ///
 /// Additionally, this function implements DIV→P transformation: DIVs without
 /// block-level children are converted to P tags to match Mozilla's behavior.
-fn element_to_html(element: ElementRef) -> String {
+///
+/// When `sanitize` is `true`, event-handler attributes and dangerous URL schemes
+/// in `href`/`src`/`xlink:href` are dropped; see [`is_event_handler_attr`] and
+/// [`is_dangerous_url`]. This is an opt-in harm reducer, not a full sanitizer.
+fn element_to_html(element: ElementRef, sanitize: bool) -> String {
     use scraper::node::Node;
     if !dom_utils::is_probably_visible(element) {
         return String::new();
@@ -917,6 +969,14 @@ fn element_to_html(element: ElementRef) -> String {
     html.push_str(&format!("<{tag_name}"));
 
     for (name, value) in elem_data.attrs.iter() {
+        if sanitize {
+            if is_event_handler_attr(&name.local) {
+                continue;
+            }
+            if matches!(&*name.local, "href" | "src" | "xlink:href") && is_dangerous_url(value) {
+                continue;
+            }
+        }
         html.push_str(&format!(" {}=\"{}\"", name.local, escape(value)));
     }
 
@@ -931,7 +991,7 @@ fn element_to_html(element: ElementRef) -> String {
         match child.value() {
             Node::Element(_) => {
                 if let Some(child_elem) = ElementRef::wrap(child) {
-                    let child_html = element_to_html(child_elem);
+                    let child_html = element_to_html(child_elem, sanitize);
                     if !child_html.is_empty() {
                         html.push_str(&child_html);
                     }
@@ -995,6 +1055,108 @@ mod tests {
             el.value().attr("props").unwrap(),
             r#"{"keyEvents":[{"id":"abc","html":"<p>x</p>"}]}"#
         );
+    }
+
+    #[test]
+    fn test_sanitize_content_strips_event_handlers_and_dangerous_schemes() {
+        let html = r#"<html><body><article>
+            <p>This is a substantial paragraph with enough text to satisfy readability thresholds. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+            <p>Another paragraph with plenty of content <img src="pic.jpg" onerror="alert(1)" alt="pic"> and a link <a href="javascript:alert(1)">click here</a> to make sure the section is picked up as the article body by the scoring algorithm.</p>
+            </article></body></html>"#;
+
+        let document = Html::parse_document(html);
+        let options = ReadabilityOptions::builder()
+            .char_threshold(100)
+            .sanitize_content(true)
+            .build();
+        let content = grab_article(&document, &options).unwrap().unwrap();
+
+        assert!(!content.contains("onerror"));
+        assert!(!content.contains("javascript:"));
+        assert!(content.contains("pic.jpg"));
+        assert!(content.contains("click here"));
+    }
+
+    #[test]
+    fn test_sanitize_content_preserves_safe_urls() {
+        let html = "<html><body><article>
+            <p>This is a substantial paragraph with enough text to satisfy readability thresholds. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+            <p>Another paragraph <img src=\"data:image/png;base64,iVBORw0KGgo=\" alt=\"placeholder\"> with a normal <a href=\"  \tHTTPS://example.com/page\">link</a> to ensure the section scores well enough to be selected as article content.</p>
+            </article></body></html>";
+
+        let document = Html::parse_document(html);
+        let options = ReadabilityOptions::builder()
+            .char_threshold(100)
+            .sanitize_content(true)
+            .build();
+        let content = grab_article(&document, &options).unwrap().unwrap();
+
+        // Values are entity-escaped for parsing correctness (e.g. `/` -> `&#x2f;`),
+        // so verify via the decoded attribute value after re-parsing, as in
+        // `test_attribute_values_are_escaped`.
+        let reparsed = Html::parse_fragment(&content);
+        let img_sel = Selector::parse("img").unwrap();
+        let img = reparsed.select(&img_sel).next().expect("img should survive sanitization");
+        assert_eq!(
+            img.value().attr("src").unwrap(),
+            "data:image/png;base64,iVBORw0KGgo="
+        );
+
+        let a_sel = Selector::parse("a").unwrap();
+        let a = reparsed.select(&a_sel).next().expect("link should survive sanitization");
+        assert_eq!(a.value().attr("href").unwrap(), "  \tHTTPS://example.com/page");
+    }
+
+    #[test]
+    fn test_sanitize_content_default_false_preserves_event_handlers() {
+        let html = r#"<html><body><article>
+            <p>This is a substantial paragraph with enough text to satisfy readability thresholds. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+            <p>Another paragraph with plenty of content <img src="pic.jpg" onerror="alert(1)" alt="pic"> and a link <a href="javascript:alert(1)">click here</a> to make sure the section is picked up as the article body by the scoring algorithm.</p>
+            </article></body></html>"#;
+
+        let document = Html::parse_document(html);
+        let options = ReadabilityOptions::builder().char_threshold(100).build();
+        let content = grab_article(&document, &options).unwrap().unwrap();
+
+        assert!(content.contains("onerror"));
+        assert!(content.contains("javascript:"));
+    }
+
+    #[test]
+    fn test_is_dangerous_url() {
+        assert!(is_dangerous_url("JavaScript:alert(1)"));
+        assert!(is_dangerous_url("\t\n javascript:alert(1)"));
+        assert!(is_dangerous_url("VBScript:msgbox(1)"));
+        assert!(is_dangerous_url("data:text/html,<script>alert(1)</script>"));
+        assert!(!is_dangerous_url("data:image/png;base64,iVBORw0KGgo="));
+        assert!(!is_dangerous_url("/relative/path"));
+        assert!(!is_dangerous_url("//host/path"));
+        assert!(!is_dangerous_url("https://example.com"));
+
+        // Browsers strip ASCII tab/newline/CR and C0 controls while parsing a URL,
+        // so a scheme with embedded whitespace/control chars still reaches the page
+        // as `javascript:` — the filter must normalize the scheme, not just its prefix.
+        assert!(is_dangerous_url("java\tscript:alert(1)"));
+        assert!(is_dangerous_url("java\nscript:alert(1)"));
+        assert!(is_dangerous_url("java\rscript:alert(1)"));
+        assert!(is_dangerous_url("jav\0ascript:alert(1)"));
+
+        // Must not panic on multi-byte UTF-8 input.
+        assert!(!is_dangerous_url("https://example.com/İstanbul/🎉"));
+        assert!(!is_dangerous_url("İ"));
+        assert!(!is_dangerous_url("🎉:notreal"));
+    }
+
+    #[test]
+    fn test_is_event_handler_attr() {
+        assert!(is_event_handler_attr("onclick"));
+        assert!(is_event_handler_attr("ONERROR"));
+        assert!(is_event_handler_attr("onload"));
+        assert!(!is_event_handler_attr("on"));
+        assert!(!is_event_handler_attr("href"));
+        // "once" starts with "on" and is longer than 2 chars: intentionally dropped too,
+        // per the plan's accepted false-positive tradeoff for this opt-in filter.
+        assert!(is_event_handler_attr("once"));
     }
 
     #[test]

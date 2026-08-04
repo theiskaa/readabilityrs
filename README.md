@@ -96,6 +96,9 @@ fn extract_article(html: &str, url: &str) -> Result<String, ReadabilityError> {
 }
 ```
 
+## Security
+`article.content` is derived from untrusted input (arbitrary web pages) and is **not sanitized by default**, matching Mozilla's Readability.js contract: every attribute of every kept element, including event handlers (`onerror`, `onclick`, …) and dangerous URL schemes (`javascript:`, `data:text/html`, …), survives into the output HTML. Consumers who render `article.content` into a webview or browser DOM must sanitize it themselves, for example with the [`ammonia`](https://crates.io/crates/ammonia) crate. As a partial mitigation, enabling `ReadabilityOptions::sanitize_content` strips event-handler attributes and the highest-risk URL schemes during serialization — it is a harm reducer, not a substitute for a real HTML sanitizer.
+
 ## Benchmarks
 
 Performance comparison against Mozilla's original Readability.js using identical test documents:

@@ -190,6 +190,19 @@ pub struct ReadabilityOptions {
     ///
     /// Default: `None` (uses `MarkdownOptions::default()`)
     pub markdown_options: Option<MarkdownOptions>,
+
+    /// Whether to strip high-risk markup during serialization of the
+    /// extracted content: event-handler attributes (`on*`) and `href`/`src`
+    /// values with `javascript:`, `vbscript:`, or `data:` schemes
+    /// (`data:image/*` is allowed).
+    ///
+    /// Default is `false`, matching Readability.js: the extracted HTML is
+    /// NOT sanitized and must be treated as untrusted input by consumers.
+    /// This option is a harm reducer, not a substitute for a real HTML
+    /// sanitizer. Note the `data:image/*` allowance also permits
+    /// `data:image/svg+xml`, and SVG can carry embedded script in some
+    /// rendering contexts.
+    pub sanitize_content: bool,
 }
 
 impl Default for ReadabilityOptions {
@@ -209,6 +222,7 @@ impl Default for ReadabilityOptions {
             clean_whitespace: true,
             output_markdown: false,
             markdown_options: None,
+            sanitize_content: false,
         }
     }
 }
@@ -252,6 +266,7 @@ pub struct ReadabilityOptionsBuilder {
     clean_whitespace: Option<bool>,
     output_markdown: Option<bool>,
     markdown_options: Option<MarkdownOptions>,
+    sanitize_content: Option<bool>,
 }
 
 impl ReadabilityOptionsBuilder {
@@ -354,6 +369,17 @@ impl ReadabilityOptionsBuilder {
         self
     }
 
+    /// Enable or disable opt-in sanitization of extracted content
+    ///
+    /// When enabled, strips event-handler attributes (`on*`) and `href`/`src`
+    /// values with `javascript:`, `vbscript:`, or `data:` schemes (except
+    /// `data:image/*`) during serialization. This is a harm reducer, not a
+    /// substitute for a real HTML sanitizer; see the crate-level security note.
+    pub fn sanitize_content(mut self, sanitize: bool) -> Self {
+        self.sanitize_content = Some(sanitize);
+        self
+    }
+
     /// Build the ReadabilityOptions
     pub fn build(self) -> ReadabilityOptions {
         let defaults = ReadabilityOptions::default();
@@ -380,6 +406,7 @@ impl ReadabilityOptionsBuilder {
             clean_whitespace: self.clean_whitespace.unwrap_or(defaults.clean_whitespace),
             output_markdown: self.output_markdown.unwrap_or(defaults.output_markdown),
             markdown_options: self.markdown_options.or(defaults.markdown_options),
+            sanitize_content: self.sanitize_content.unwrap_or(defaults.sanitize_content),
         }
     }
 }
