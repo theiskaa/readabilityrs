@@ -44,7 +44,7 @@ let html = r#"
     </html>
 "#;
 
-let readability = Readability::new(html, None, None)?;
+let readability = Readability::new(html, None, None).unwrap();
 if let Some(article) = readability.parse() {
     println!("Title: {}", article.title.unwrap_or_default());
     println!("Content: {}", article.content.unwrap_or_default());
@@ -63,11 +63,13 @@ Enable `output_markdown(true)` and the returned `Article` carries a `markdown_co
 ```rust
 use readabilityrs::{Readability, ReadabilityOptions};
 
+let html = "<html><body><article><p>Article text.</p></article></body></html>";
+
 let options = ReadabilityOptions::builder()
     .output_markdown(true)
     .build();
 
-let readability = Readability::new(&html, None, Some(options))?;
+let readability = Readability::new(html, None, Some(options)).unwrap();
 let markdown = readability.parse().and_then(|a| a.markdown_content);
 ```
 
@@ -80,6 +82,8 @@ Heading style, bullet character, code fence character, emphasis delimiters, and 
 ```rust
 use readabilityrs::{Readability, ReadabilityOptions};
 
+let html = "<html><body><article><p>Article text.</p></article></body></html>";
+
 let options = ReadabilityOptions::builder()
     .debug(true)
     .char_threshold(500)
@@ -88,7 +92,7 @@ let options = ReadabilityOptions::builder()
     .link_density_modifier(0.0)
     .build();
 
-let readability = Readability::new(&html, None, Some(options))?;
+let readability = Readability::new(html, None, Some(options)).unwrap();
 ```
 
 `max_elems_to_parse` caps how many elements a document may contain before extraction refuses to run. It defaults to `0`, meaning unlimited. The count happens after parsing, so it bounds extraction work rather than parsing work; bound the input length too if you accept arbitrary pages.

@@ -120,6 +120,14 @@
 //! conditional cleaning. If every attempt stays under the character threshold, the
 //! longest one is returned.
 
+/// Compiles every `rust` fence in `README.md` as a doctest so the front page of
+/// crates.io cannot drift from the API. Exists only under `cargo test`; the README
+/// is deliberately not pulled into the crate docs, since it carries badges, install
+/// instructions and repository-relative links that do not belong on docs.rs.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 mod article;
 mod cleaner;
 mod constants;
