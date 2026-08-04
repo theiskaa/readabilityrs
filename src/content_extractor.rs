@@ -4,6 +4,7 @@ use crate::constants::{ParseFlags, DEFAULT_TAGS_TO_SCORE, REGEXPS};
 use crate::error::{ReadabilityError, Result};
 use crate::options::ReadabilityOptions;
 use crate::{dom_utils, scoring};
+use ego_tree::NodeId;
 use scraper::{ElementRef, Html, Selector};
 use std::collections::HashMap;
 use v_htmlescape::escape;
@@ -181,8 +182,8 @@ fn score_candidates<'a>(
     candidates: Vec<ElementRef<'a>>,
     options: &ReadabilityOptions,
     flags: ParseFlags,
-) -> HashMap<String, f64> {
-    let mut scores: HashMap<String, f64> = HashMap::new();
+) -> HashMap<NodeId, f64> {
+    let mut scores: HashMap<NodeId, f64> = HashMap::new();
 
     for candidate in candidates {
         let content_score =
@@ -194,7 +195,7 @@ fn score_candidates<'a>(
 
         // Ensure the candidate itself is tracked; in Mozilla's implementation the
         // element owns the score before propagating to ancestors.
-        let candidate_id = get_element_id(&candidate);
+        let candidate_id = candidate.id();
         let candidate_entry = scores
             .entry(candidate_id)
             .or_insert_with(|| scoring::initialize_node_score(candidate, flags));
@@ -205,11 +206,10 @@ fn score_candidates<'a>(
         // Propagate score to ancestors
         // Parent gets 1x, grandparent gets 0.5x, great-grandparent gets 0.33x, etc.
         for (level, ancestor) in ancestors.iter().enumerate() {
-            let ancestor_id = get_element_id(ancestor);
-            if !scores.contains_key(&ancestor_id) {
-                let base_score = scoring::initialize_node_score(*ancestor, flags);
-                scores.insert(ancestor_id.clone(), base_score);
-            }
+            let ancestor_id = ancestor.id();
+            scores
+                .entry(ancestor_id)
+                .or_insert_with(|| scoring::initialize_node_score(*ancestor, flags));
 
             let score_divider = if level == 0 {
                 1.0
@@ -228,9 +228,9 @@ fn score_candidates<'a>(
 }
 
 /// Adjust candidate scores based on their actual link density.
-fn apply_link_density_penalty(document: &Html, scores: &mut HashMap<String, f64>) {
+fn apply_link_density_penalty(document: &Html, scores: &mut HashMap<NodeId, f64>) {
     for (element_id, score) in scores.iter_mut() {
-        if let Some(element) = find_element_by_id(document, element_id) {
+        if let Some(element) = find_element_by_id(document, *element_id) {
             let penalty = (1.0 - dom_utils::get_link_density(element)).max(0.0);
             *score *= penalty;
         }
@@ -240,29 +240,29 @@ fn apply_link_density_penalty(document: &Html, scores: &mut HashMap<String, f64>
 /// Find the best candidate based on scores, promoting parents when needed.
 fn find_best_candidate(
     document: &Html,
-    scores: &HashMap<String, f64>,
+    scores: &HashMap<NodeId, f64>,
     options: &ReadabilityOptions,
-) -> Option<String> {
+) -> Option<NodeId> {
     let mut sorted_scores: Vec<_> = scores.iter().collect();
-    sorted_scores.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    sorted_scores.sort_by(|a, b| b.1.total_cmp(a.1));
 
-    let top_candidates: Vec<(String, f64)> = sorted_scores
+    let top_candidates: Vec<(NodeId, f64)> = sorted_scores
         .iter()
         .take(options.nb_top_candidates)
-        .map(|(id, score)| ((*id).clone(), **score))
+        .map(|(id, score)| (**id, **score))
         .collect();
 
     if top_candidates.is_empty() {
         return None;
     }
 
-    let mut best_id = top_candidates[0].0.clone();
+    let mut best_id = top_candidates[0].0;
     let mut best_score = top_candidates[0].1;
 
     for (candidate_id, candidate_score) in &top_candidates {
-        if let Some(elem) = find_element_by_id(document, candidate_id) {
+        if let Some(elem) = find_element_by_id(document, *candidate_id) {
             if is_viable_best_candidate(elem, *candidate_score) {
-                best_id = candidate_id.clone();
+                best_id = *candidate_id;
                 best_score = *candidate_score;
                 break;
             }
@@ -270,30 +270,29 @@ fn find_best_candidate(
     }
 
     if let Some(promoted) =
-        promote_shared_top_candidate_parent(document, &best_id, best_score, &top_candidates)
+        promote_shared_top_candidate_parent(document, best_id, best_score, &top_candidates)
     {
         best_id = promoted;
         best_score = scores.get(&best_id).copied().unwrap_or(best_score);
     }
 
-    if let Some(promoted) = promote_high_scoring_parents(document, &best_id, best_score, scores) {
+    if let Some(promoted) = promote_high_scoring_parents(document, best_id, best_score, scores) {
         best_id = promoted;
         best_score = scores.get(&best_id).copied().unwrap_or(best_score);
     }
 
     // If the best candidate lives inside a single-child parent chain, walk up so we can pull siblings later.
-    if let Some(promoted) = promote_single_child_parents(document, &best_id) {
+    if let Some(promoted) = promote_single_child_parents(document, best_id) {
         best_id = promoted;
     }
 
-    if let Some(promoted) = promote_dense_wrapper_child(document, &best_id, scores, &sorted_scores)
-    {
+    if let Some(promoted) = promote_dense_wrapper_child(document, best_id, scores, &sorted_scores) {
         best_id = promoted;
         best_score = scores.get(&best_id).copied().unwrap_or(best_score);
     }
 
     if let Some(promoted) =
-        promote_semantic_descendant(document, &best_id, best_score, &sorted_scores)
+        promote_semantic_descendant(document, best_id, best_score, &sorted_scores)
     {
         best_id = promoted;
     }
@@ -302,7 +301,7 @@ fn find_best_candidate(
 }
 
 /// Promote parent nodes when the current candidate is the only child, mirroring Mozilla's logic.
-fn promote_single_child_parents(document: &Html, best_id: &str) -> Option<String> {
+fn promote_single_child_parents(document: &Html, best_id: NodeId) -> Option<NodeId> {
     let mut promoted_id = None;
     let mut current = find_element_by_id(document, best_id)?;
 
@@ -316,8 +315,8 @@ fn promote_single_child_parents(document: &Html, best_id: &str) -> Option<String
         }
 
         if count_element_children(parent) == 1 {
-            let parent_id = get_element_id(&parent);
-            promoted_id = Some(parent_id.clone());
+            let parent_id = parent.id();
+            promoted_id = Some(parent_id);
             current = parent;
             continue;
         }
@@ -331,23 +330,23 @@ fn promote_single_child_parents(document: &Html, best_id: &str) -> Option<String
 /// Promote a higher scoring parent when it looks more article-like than the current candidate.
 fn promote_shared_top_candidate_parent(
     document: &Html,
-    best_id: &str,
+    best_id: NodeId,
     best_score: f64,
-    top_candidates: &[(String, f64)],
-) -> Option<String> {
+    top_candidates: &[(NodeId, f64)],
+) -> Option<NodeId> {
     const MINIMUM_TOP_CANDIDATES: usize = 3;
     if best_score <= 0.0 {
         return None;
     }
 
-    let mut ancestor_lists: Vec<Vec<String>> = Vec::new();
+    let mut ancestor_lists: Vec<Vec<NodeId>> = Vec::new();
 
     for (candidate_id, candidate_score) in top_candidates.iter().skip(1) {
         if *candidate_score < best_score * 0.75 {
             continue;
         }
 
-        let Some(candidate_elem) = find_element_by_id(document, candidate_id) else {
+        let Some(candidate_elem) = find_element_by_id(document, *candidate_id) else {
             continue;
         };
         let ancestors = dom_utils::get_node_ancestors(candidate_elem, None);
@@ -357,7 +356,7 @@ fn promote_shared_top_candidate_parent(
 
         let ancestor_ids = ancestors
             .into_iter()
-            .map(|ancestor| get_element_id(&ancestor))
+            .map(|ancestor| ancestor.id())
             .collect::<Vec<_>>();
         ancestor_lists.push(ancestor_ids);
     }
@@ -371,7 +370,7 @@ fn promote_shared_top_candidate_parent(
         .and_then(ElementRef::wrap)?;
 
     while !parent_opt.value().name().eq_ignore_ascii_case("body") {
-        let parent_id = get_element_id(&parent_opt);
+        let parent_id = parent_opt.id();
         let containing_lists = ancestor_lists
             .iter()
             .filter(|ancestors| ancestors.iter().any(|id| id == &parent_id))
@@ -392,10 +391,10 @@ fn promote_shared_top_candidate_parent(
 
 fn promote_high_scoring_parents(
     document: &Html,
-    best_id: &str,
+    best_id: NodeId,
     best_score: f64,
-    scores: &HashMap<String, f64>,
-) -> Option<String> {
+    scores: &HashMap<NodeId, f64>,
+) -> Option<NodeId> {
     let mut current = find_element_by_id(document, best_id)?;
     let mut last_score = best_score;
     let score_threshold = best_score / 3.0;
@@ -423,7 +422,7 @@ fn promote_high_scoring_parents(
             continue;
         }
 
-        let parent_id = get_element_id(&parent);
+        let parent_id = parent.id();
         let Some(parent_score) = scores.get(&parent_id) else {
             current = parent;
             continue;
@@ -453,10 +452,10 @@ fn promote_high_scoring_parents(
 /// If our best candidate is a wrapper with high link density, look for a better child candidate.
 fn promote_dense_wrapper_child(
     document: &Html,
-    best_id: &str,
-    scores: &HashMap<String, f64>,
-    sorted_scores: &[(&String, &f64)],
-) -> Option<String> {
+    best_id: NodeId,
+    scores: &HashMap<NodeId, f64>,
+    sorted_scores: &[(&NodeId, &f64)],
+) -> Option<NodeId> {
     let best_elem = find_element_by_id(document, best_id)?;
 
     let tag = best_elem.value().name().to_uppercase();
@@ -464,16 +463,16 @@ fn promote_dense_wrapper_child(
         return None;
     }
 
-    let parent_score = scores.get(best_id).copied().unwrap_or(0.0);
+    let parent_score = scores.get(&best_id).copied().unwrap_or(0.0);
     let best_link_density = dom_utils::get_link_density(best_elem);
 
     let mut fallback = None;
 
     for (candidate_id, candidate_score) in sorted_scores.iter().take(20) {
-        if *candidate_id == best_id {
+        if **candidate_id == best_id {
             continue;
         }
-        let Some(candidate_elem) = find_element_by_id(document, candidate_id) else {
+        let Some(candidate_elem) = find_element_by_id(document, **candidate_id) else {
             continue;
         };
 
@@ -524,7 +523,7 @@ fn promote_dense_wrapper_child(
             .map(|(_, existing_score)| score > *existing_score)
             .unwrap_or(true)
         {
-            fallback = Some(((*candidate_id).clone(), score));
+            fallback = Some((**candidate_id, score));
         }
     }
 
@@ -539,10 +538,10 @@ fn promote_dense_wrapper_child(
 
 fn promote_semantic_descendant(
     document: &Html,
-    best_id: &str,
+    best_id: NodeId,
     best_score: f64,
-    sorted_scores: &[(&String, &f64)],
-) -> Option<String> {
+    sorted_scores: &[(&NodeId, &f64)],
+) -> Option<NodeId> {
     if best_score <= 0.0 {
         return None;
     }
@@ -576,14 +575,14 @@ fn promote_semantic_descendant(
     const POSITIVE_KEYWORDS: [&str; 7] =
         ["article", "post", "entry", "body", "story", "text", "blog"];
 
-    let mut promoted_child: Option<(String, f64)> = None;
+    let mut promoted_child: Option<(NodeId, f64)> = None;
 
     for (candidate_id, candidate_score) in sorted_scores.iter().take(40) {
-        if *candidate_id == best_id {
+        if **candidate_id == best_id {
             continue;
         }
 
-        let Some(candidate_elem) = find_element_by_id(document, candidate_id) else {
+        let Some(candidate_elem) = find_element_by_id(document, **candidate_id) else {
             continue;
         };
 
@@ -629,7 +628,7 @@ fn promote_semantic_descendant(
             .map(|(_, existing_score)| score > *existing_score)
             .unwrap_or(true)
         {
-            promoted_child = Some(((*candidate_id).clone(), score));
+            promoted_child = Some((**candidate_id, score));
         }
     }
 
@@ -647,11 +646,11 @@ fn promote_semantic_descendant(
 /// 4. Aggregate all content together
 fn extract_article_content(
     document: &Html,
-    best_candidate_id: String,
-    all_scores: &HashMap<String, f64>,
+    best_candidate_id: NodeId,
+    all_scores: &HashMap<NodeId, f64>,
     options: &ReadabilityOptions,
 ) -> Result<String> {
-    let Some(best_candidate) = find_element_by_id(document, &best_candidate_id) else {
+    let Some(best_candidate) = find_element_by_id(document, best_candidate_id) else {
         return Ok(String::new());
     };
 
@@ -676,7 +675,7 @@ fn extract_article_content(
             continue;
         };
 
-        let sibling_id = get_element_id(&sibling);
+        let sibling_id = sibling.id();
         let is_best_candidate = sibling_id == best_candidate_id;
 
         let should_include = if is_best_candidate {
@@ -863,11 +862,11 @@ fn count_element_children(element: ElementRef) -> usize {
     element.children().filter_map(ElementRef::wrap).count()
 }
 
-fn is_descendant_of(element: ElementRef, ancestor_id: &str) -> bool {
+fn is_descendant_of(element: ElementRef, ancestor_id: NodeId) -> bool {
     let mut parent_opt = element.parent();
     while let Some(parent_node) = parent_opt {
         if let Some(parent_elem) = ElementRef::wrap(parent_node) {
-            if get_element_id(&parent_elem) == ancestor_id {
+            if parent_elem.id() == ancestor_id {
                 return true;
             }
             parent_opt = parent_elem.parent();
@@ -1056,19 +1055,12 @@ fn element_to_html(element: ElementRef, sanitize: bool) -> String {
     html
 }
 
-fn get_element_id(element: &ElementRef) -> String {
-    format!("{:?}", element.id())
-}
-
-/// Find an element by our generated ID
-fn find_element_by_id<'a>(document: &'a Html, id: &str) -> Option<ElementRef<'a>> {
-    // This is a simplified approach - in production we'd need better element tracking
-    // For now, search for elements and match by generated ID
-
-    let all_selector = Selector::parse("*").unwrap();
-    document
-        .select(&all_selector)
-        .find(|&elem| get_element_id(&elem) == id)
+/// Resolve a node id back to an element in the document it came from.
+///
+/// `NodeId` is only meaningful for its own tree, so passing an id from a
+/// different parse returns whatever node happens to occupy that slot.
+fn find_element_by_id(document: &Html, id: NodeId) -> Option<ElementRef<'_>> {
+    document.tree.get(id).and_then(ElementRef::wrap)
 }
 
 #[cfg(test)]
@@ -1337,6 +1329,19 @@ mod tests {
             .unwrap()
             .parse()
             .is_some());
+    }
+
+    #[test]
+    fn test_find_element_by_id_round_trips() {
+        let document =
+            Html::parse_document("<html><body><article><p>Text</p></article></body></html>");
+        let selector = Selector::parse("article").unwrap();
+        let article = document.select(&selector).next().unwrap();
+
+        let resolved = find_element_by_id(&document, article.id()).unwrap();
+
+        assert_eq!(resolved.id(), article.id());
+        assert_eq!(resolved.value().name(), "article");
     }
 
     #[test]
