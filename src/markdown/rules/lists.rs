@@ -39,23 +39,29 @@ mod tests {
     #[test]
     fn test_unordered_item() {
         let opts = MarkdownOptions::default();
-        let mut state = ConversionState::default();
-        state.list_depth = 1;
+        let state = ConversionState {
+            list_depth: 1,
+            ..Default::default()
+        };
         assert_eq!(convert_unordered_item("item", &opts, &state), "- item\n");
     }
 
     #[test]
     fn test_nested_ordered_item() {
-        let mut state = ConversionState::default();
-        state.list_depth = 2;
+        let state = ConversionState {
+            list_depth: 2,
+            ..Default::default()
+        };
         assert_eq!(convert_ordered_item("item", 3, &state), "  3. item\n");
     }
 
     #[test]
     fn test_task_item() {
         let opts = MarkdownOptions::default();
-        let mut state = ConversionState::default();
-        state.list_depth = 1;
+        let state = ConversionState {
+            list_depth: 1,
+            ..Default::default()
+        };
         assert_eq!(
             convert_task_item("done", true, &opts, &state),
             "- [x] done\n"

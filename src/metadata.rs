@@ -1825,7 +1825,7 @@ mod tests {
         // TODO: Colon separator extraction needs refinement
         // For now, just verify we got a title
         assert!(title.is_some());
-        assert!(title.as_ref().unwrap().len() > 0);
+        assert!(!title.as_ref().unwrap().is_empty());
     }
 
     #[test]
@@ -2115,7 +2115,7 @@ mod tests {
             "pb-byline element not found"
         );
         let elem = document.select(&selector).next().unwrap();
-        let text = collect_byline_candidate_text(elem.clone());
+        let text = collect_byline_candidate_text(elem);
         assert!(
             text.contains("Erin Cunningham"),
             "pb-byline text was {:?}",

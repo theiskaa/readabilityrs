@@ -80,8 +80,10 @@ mod tests {
 
     #[test]
     fn test_reference_style() {
-        let mut opts = MarkdownOptions::default();
-        opts.link_style = LinkStyle::Reference;
+        let opts = MarkdownOptions {
+            link_style: LinkStyle::Reference,
+            ..Default::default()
+        };
         let mut state = ConversionState::default();
         let result = convert_link("click", "https://example.com", "", &opts, &mut state);
         assert_eq!(result, "[click][1]");

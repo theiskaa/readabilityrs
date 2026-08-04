@@ -40,8 +40,10 @@ mod tests {
 
     #[test]
     fn test_setext_headings() {
-        let mut opts = MarkdownOptions::default();
-        opts.heading_style = HeadingStyle::Setext;
+        let opts = MarkdownOptions {
+            heading_style: HeadingStyle::Setext,
+            ..Default::default()
+        };
         let result = convert_heading(1, "Title", &opts);
         assert!(result.contains("Title\n====="));
     }

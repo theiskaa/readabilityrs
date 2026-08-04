@@ -56,7 +56,7 @@ pub fn grab_article(document: &Html, options: &ReadabilityOptions) -> Result<Opt
 
     // No successful extraction with threshold, return longest attempt
     if !attempts.is_empty() {
-        attempts.sort_by(|a, b| b.text_length.cmp(&a.text_length));
+        attempts.sort_by_key(|a| std::cmp::Reverse(a.text_length));
         if attempts[0].text_length > 0 {
             return Ok(Some(attempts[0].content.clone()));
         }
@@ -1228,10 +1228,10 @@ mod tests {
         let flags = ParseFlags::WEIGHT_CLASSES | ParseFlags::CLEAN_CONDITIONALLY;
 
         let candidates = find_candidates(&document, &options, flags).unwrap();
-        assert!(candidates.len() > 0);
+        assert!(!candidates.is_empty());
 
         let scores = score_candidates(&document, candidates, &options, flags);
-        assert!(scores.len() > 0);
+        assert!(!scores.is_empty());
     }
 
     #[test]

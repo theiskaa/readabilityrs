@@ -35,14 +35,13 @@ pub fn standardize_footnotes(html: &str) -> String {
     }
 
     // Standardize references: replace with canonical format
-    let mut counter = 1u32;
-    for r in &refs {
+    for (i, r) in refs.iter().enumerate() {
+        let counter = i as u32 + 1;
         let canonical = format!(
             "<sup id=\"fnref:{}\"><a href=\"#fn:{}\">{}</a></sup>",
             counter, counter, counter
         );
         output = output.replace(&r.original_html, &canonical);
-        counter += 1;
     }
 
     // Remove original definition containers and rebuild at end
