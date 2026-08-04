@@ -12,7 +12,9 @@ pub fn convert(doc: &Html, opts: &MarkdownOptions) -> String {
 
     // Append collected footnotes
     if !state.footnotes.is_empty() {
-        output.push_str(&rules::footnotes::format_footnote_definitions(&state.footnotes));
+        output.push_str(&rules::footnotes::format_footnote_definitions(
+            &state.footnotes,
+        ));
     }
 
     // Append collected link references (for reference-style links)
@@ -62,11 +64,7 @@ fn convert_children(
 }
 
 /// Convert a single element node to markdown.
-fn convert_element(
-    el: ElementRef,
-    opts: &MarkdownOptions,
-    state: &mut ConversionState,
-) -> String {
+fn convert_element(el: ElementRef, opts: &MarkdownOptions, state: &mut ConversionState) -> String {
     let tag = el.value().name().to_lowercase();
 
     match tag.as_str() {
@@ -206,12 +204,16 @@ fn convert_element(
             rules::media::convert_iframe(src)
         }
         "video" => {
-            let src = el.value().attr("src")
+            let src = el
+                .value()
+                .attr("src")
                 .unwrap_or_else(|| find_source_src(&el).unwrap_or(""));
             rules::media::convert_video(src)
         }
         "audio" => {
-            let src = el.value().attr("src")
+            let src = el
+                .value()
+                .attr("src")
                 .unwrap_or_else(|| find_source_src(&el).unwrap_or(""));
             rules::media::convert_audio(src)
         }
@@ -244,23 +246,29 @@ fn convert_element(
         "sup" => {
             let inner = convert_children(el, opts, state);
             let trimmed = inner.trim();
-            if trimmed.is_empty() { String::new() } else { format!("^{}^", trimmed) }
+            if trimmed.is_empty() {
+                String::new()
+            } else {
+                format!("^{}^", trimmed)
+            }
         }
         "sub" => {
             let inner = convert_children(el, opts, state);
             let trimmed = inner.trim();
-            if trimmed.is_empty() { String::new() } else { format!("~{}~", trimmed) }
+            if trimmed.is_empty() {
+                String::new()
+            } else {
+                format!("~{}~", trimmed)
+            }
         }
 
         // Details/summary — preserve as raw HTML (most renderers support it)
         "details" => format!("\n\n{}\n\n", el.html()),
 
         // Spans and other inline — transparent pass-through
-        "span" | "abbr" | "cite" | "dfn" | "kbd" | "samp" | "var" | "time" | "data"
-        | "small" | "ins" | "u" | "q" | "bdo" | "bdi" | "wbr"
-        | "ruby" | "rt" | "rp" | "summary" | "label" => {
-            convert_children(el, opts, state)
-        }
+        "span" | "abbr" | "cite" | "dfn" | "kbd" | "samp" | "var" | "time" | "data" | "small"
+        | "ins" | "u" | "q" | "bdo" | "bdi" | "wbr" | "ruby" | "rt" | "rp" | "summary"
+        | "label" => convert_children(el, opts, state),
 
         // Definition lists
         "dl" => convert_children(el, opts, state),
@@ -320,11 +328,7 @@ fn convert_pre_block(
 }
 
 /// Convert a `<figure>` element.
-fn convert_figure(
-    el: ElementRef,
-    opts: &MarkdownOptions,
-    state: &mut ConversionState,
-) -> String {
+fn convert_figure(el: ElementRef, opts: &MarkdownOptions, state: &mut ConversionState) -> String {
     let img_sel = Selector::parse("img").ok();
     let caption_sel = Selector::parse("figcaption").ok();
 
@@ -343,12 +347,10 @@ fn convert_figure(
     };
 
     let caption = caption_sel.and_then(|sel| {
-        el.select(&sel)
-            .next()
-            .map(|cap| {
-                let raw: String = cap.text().collect();
-                collapse_whitespace(raw.trim())
-            })
+        el.select(&sel).next().map(|cap| {
+            let raw: String = cap.text().collect();
+            collapse_whitespace(raw.trim())
+        })
     });
 
     rules::images::convert_figure(&alt, &src, caption.as_deref())
@@ -422,11 +424,7 @@ fn convert_children_skip_checkbox(
 }
 
 /// Convert a `<table>` element.
-fn convert_table(
-    el: ElementRef,
-    opts: &MarkdownOptions,
-    state: &mut ConversionState,
-) -> String {
+fn convert_table(el: ElementRef, opts: &MarkdownOptions, state: &mut ConversionState) -> String {
     // Check if complex
     if rules::tables::is_complex_table(&el) && opts.preserve_complex_tables {
         return format!("\n\n{}\n\n", el.html());
@@ -705,9 +703,7 @@ mod tests {
 
     #[test]
     fn test_code_block() {
-        let result = convert_html(
-            r#"<pre><code class="language-rust">fn main() {}</code></pre>"#,
-        );
+        let result = convert_html(r#"<pre><code class="language-rust">fn main() {}</code></pre>"#);
         assert!(result.contains("```rust"));
         assert!(result.contains("fn main() {}"));
     }

@@ -4,18 +4,13 @@ use scraper::{Html, Selector};
 
 use super::languages::{is_known_language, normalize_language};
 
-static LANGUAGE_CLASS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)^language-(.+)$").unwrap());
-static LANG_CLASS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)^lang-(.+)$").unwrap());
+static LANGUAGE_CLASS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^language-(.+)$").unwrap());
+static LANG_CLASS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^lang-(.+)$").unwrap());
 static HIGHLIGHT_SOURCE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)^highlight-source-(.+)$").unwrap());
-static BRUSH_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)brush:\s*(\w+)").unwrap());
-static LINE_NUMBER_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?m)^\s*\d+[\s|]").unwrap());
-static MULTI_NEWLINE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
+static BRUSH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)brush:\s*(\w+)").unwrap());
+static LINE_NUMBER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\s*\d+[\s|]").unwrap());
+static MULTI_NEWLINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
 
 /// Standardize all code blocks in the HTML to canonical `<pre><code class="language-x">` form.
 ///
@@ -50,7 +45,8 @@ pub fn standardize_code_blocks(html: &str) -> String {
     }
 
     // 3. Line-number tables
-    if let Ok(sel) = Selector::parse("table.highlight-table, table.rouge-table, table.code-listing") {
+    if let Ok(sel) = Selector::parse("table.highlight-table, table.rouge-table, table.code-listing")
+    {
         for el in doc.select(&sel) {
             if let Some((lang, code)) = extract_table_code(&el) {
                 let cleaned = clean_code_content(&code);
@@ -78,7 +74,10 @@ pub fn standardize_code_blocks(html: &str) -> String {
                 continue;
             }
             // Skip if already captured by a parent selector above
-            if replacements.iter().any(|(orig, _)| orig.contains(&pre_html)) {
+            if replacements
+                .iter()
+                .any(|(orig, _)| orig.contains(&pre_html))
+            {
                 continue;
             }
             let lang = detect_language_from_pre(&pre);
@@ -99,7 +98,11 @@ pub fn standardize_code_blocks(html: &str) -> String {
 
 fn detect_language_from_pre(pre: &scraper::ElementRef) -> String {
     // Check data-lang / data-language on pre
-    if let Some(lang) = pre.value().attr("data-lang").or(pre.value().attr("data-language")) {
+    if let Some(lang) = pre
+        .value()
+        .attr("data-lang")
+        .or(pre.value().attr("data-language"))
+    {
         return normalize_language(lang);
     }
 
@@ -111,10 +114,16 @@ fn detect_language_from_pre(pre: &scraper::ElementRef) -> String {
     // Check child <code> element
     if let Ok(code_sel) = Selector::parse("code") {
         if let Some(code_el) = pre.select(&code_sel).next() {
-            if let Some(lang) = code_el.value().attr("data-lang").or(code_el.value().attr("data-language")) {
+            if let Some(lang) = code_el
+                .value()
+                .attr("data-lang")
+                .or(code_el.value().attr("data-language"))
+            {
                 return normalize_language(lang);
             }
-            if let Some(lang) = detect_language_from_classes(code_el.value().attr("class").unwrap_or("")) {
+            if let Some(lang) =
+                detect_language_from_classes(code_el.value().attr("class").unwrap_or(""))
+            {
                 return lang;
             }
         }
@@ -124,7 +133,11 @@ fn detect_language_from_pre(pre: &scraper::ElementRef) -> String {
 }
 
 fn detect_language_from_element(el: &scraper::ElementRef) -> String {
-    if let Some(lang) = el.value().attr("data-lang").or(el.value().attr("data-language")) {
+    if let Some(lang) = el
+        .value()
+        .attr("data-lang")
+        .or(el.value().attr("data-language"))
+    {
         return normalize_language(lang);
     }
     if let Some(lang) = detect_language_from_classes(el.value().attr("class").unwrap_or("")) {
@@ -134,10 +147,16 @@ fn detect_language_from_element(el: &scraper::ElementRef) -> String {
     // Check child code element
     if let Ok(code_sel) = Selector::parse("code") {
         if let Some(code_el) = el.select(&code_sel).next() {
-            if let Some(lang) = code_el.value().attr("data-lang").or(code_el.value().attr("data-language")) {
+            if let Some(lang) = code_el
+                .value()
+                .attr("data-lang")
+                .or(code_el.value().attr("data-language"))
+            {
                 return normalize_language(lang);
             }
-            if let Some(lang) = detect_language_from_classes(code_el.value().attr("class").unwrap_or("")) {
+            if let Some(lang) =
+                detect_language_from_classes(code_el.value().attr("class").unwrap_or(""))
+            {
                 return lang;
             }
         }
@@ -199,7 +218,8 @@ fn extract_shiki_text(el: &scraper::ElementRef) -> Option<String> {
     let code_sel = Selector::parse("code").ok()?;
     if let Some(code) = el.select(&code_sel).next() {
         let line_sel = Selector::parse("span.line").ok()?;
-        let lines: Vec<String> = code.select(&line_sel)
+        let lines: Vec<String> = code
+            .select(&line_sel)
             .map(|span| span.text().collect::<String>())
             .collect();
         if !lines.is_empty() {
@@ -243,7 +263,8 @@ fn extract_code_text_from_pre(pre: &scraper::ElementRef) -> Option<String> {
             // Handle Verso/Lean <code class="hl block">
             let line_sel = Selector::parse("span.line").ok();
             if let Some(ref ls) = line_sel {
-                let lines: Vec<String> = code.select(ls)
+                let lines: Vec<String> = code
+                    .select(ls)
                     .map(|s| s.text().collect::<String>())
                     .collect();
                 if !lines.is_empty() {
@@ -273,10 +294,14 @@ fn clean_code_content(code: &str) -> String {
     // Strip leading line numbers (e.g., "  1 |", " 12\t")
     let lines: Vec<&str> = s.lines().collect();
     let has_line_numbers = lines.len() > 2
-        && lines.iter().filter(|l| !l.trim().is_empty()).take(5)
+        && lines
+            .iter()
+            .filter(|l| !l.trim().is_empty())
+            .take(5)
             .all(|l| LINE_NUMBER_RE.is_match(l));
     if has_line_numbers {
-        s = lines.iter()
+        s = lines
+            .iter()
             .map(|l| LINE_NUMBER_RE.replace(l, "").to_string())
             .collect::<Vec<_>>()
             .join("\n");
@@ -330,10 +355,22 @@ mod tests {
 
     #[test]
     fn test_language_detection_bare() {
-        assert_eq!(detect_language_from_classes("python"), Some("python".into()));
-        assert_eq!(detect_language_from_classes("language-js"), Some("javascript".into()));
-        assert_eq!(detect_language_from_classes("lang-ts"), Some("typescript".into()));
-        assert_eq!(detect_language_from_classes("highlight-source-go"), Some("go".into()));
+        assert_eq!(
+            detect_language_from_classes("python"),
+            Some("python".into())
+        );
+        assert_eq!(
+            detect_language_from_classes("language-js"),
+            Some("javascript".into())
+        );
+        assert_eq!(
+            detect_language_from_classes("lang-ts"),
+            Some("typescript".into())
+        );
+        assert_eq!(
+            detect_language_from_classes("highlight-source-go"),
+            Some("go".into())
+        );
     }
 
     #[test]

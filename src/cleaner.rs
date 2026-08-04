@@ -61,15 +61,13 @@ fn remove_nav_like_sections(html: &str) -> String {
 
     for tag in tags {
         for keyword in keywords {
-            let class_pattern = format!(
-                r#"(?is)<{tag}\b[^>]*?class="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#
-            );
+            let class_pattern =
+                format!(r#"(?is)<{tag}\b[^>]*?class="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
             let re = Regex::new(&class_pattern).unwrap();
             result = re.replace_all(&result, "").to_string();
 
-            let id_pattern = format!(
-                r#"(?is)<{tag}\b[^>]*?id="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#
-            );
+            let id_pattern =
+                format!(r#"(?is)<{tag}\b[^>]*?id="[^"]*?{keyword}[^"]*?"[^>]*?>.*?</{tag}>"#);
             let re = Regex::new(&id_pattern).unwrap();
             result = re.replace_all(&result, "").to_string();
         }
@@ -107,9 +105,8 @@ fn remove_conditionally_dom(html: &str) -> Option<String> {
 /// Regex for comment-related patterns that should always be removed.
 /// These are user-generated content sections, not article content.
 /// Matches Mozilla Readability's unlikelyCandidates for comments.
-static COMMENT_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)comment|disqus|remark|replies|respond").unwrap()
-});
+static COMMENT_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)comment|disqus|remark|replies|respond").unwrap());
 
 /// Check if a class/id string indicates a comment section.
 fn is_comment_section(class_id: &str) -> bool {
@@ -584,7 +581,11 @@ fn detect_data_table(table: ElementRef) -> bool {
         return true;
     }
 
-    if table.select(&DATA_TABLE_DESCENDANT_SELECTOR).next().is_some() {
+    if table
+        .select(&DATA_TABLE_DESCENDANT_SELECTOR)
+        .next()
+        .is_some()
+    {
         return true;
     }
 
@@ -605,12 +606,7 @@ fn detect_data_table(table: ElementRef) -> bool {
     rows * columns > 10
 }
 
-fn clean_conditionally_tag(
-    doc: &mut Html,
-    root_id: NodeId,
-    tag: &str,
-    marks: &HashSet<NodeId>,
-) {
+fn clean_conditionally_tag(doc: &mut Html, root_id: NodeId, tag: &str, marks: &HashSet<NodeId>) {
     let Some(selector) = cleanup_tag_selector(tag) else {
         return;
     };

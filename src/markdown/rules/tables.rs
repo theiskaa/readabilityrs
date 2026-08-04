@@ -45,7 +45,9 @@ pub fn convert_simple_table(headers: &[String], rows: &[Vec<String>]) -> String 
     }
 
     // Calculate column widths
-    let num_cols = headers.len().max(rows.iter().map(|r| r.len()).max().unwrap_or(0));
+    let num_cols = headers
+        .len()
+        .max(rows.iter().map(|r| r.len()).max().unwrap_or(0));
     if num_cols == 0 {
         return String::new();
     }

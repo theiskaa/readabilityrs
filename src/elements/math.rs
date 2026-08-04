@@ -1,12 +1,10 @@
 use once_cell::sync::Lazy;
 use scraper::{Html, Selector};
 
-static ANN_SEL: Lazy<Option<Selector>> = Lazy::new(|| {
-    Selector::parse("annotation[encoding=\"application/x-tex\"]").ok()
-});
-static SCRIPT_SEL: Lazy<Option<Selector>> = Lazy::new(|| {
-    Selector::parse("script[type=\"math/tex\"]").ok()
-});
+static ANN_SEL: Lazy<Option<Selector>> =
+    Lazy::new(|| Selector::parse("annotation[encoding=\"application/x-tex\"]").ok());
+static SCRIPT_SEL: Lazy<Option<Selector>> =
+    Lazy::new(|| Selector::parse("script[type=\"math/tex\"]").ok());
 
 /// Standardize math elements from MathJax/KaTeX to canonical `<math data-latex="...">`.
 ///
@@ -19,14 +17,18 @@ pub fn standardize_math(html: &str) -> String {
     // MathJax v3: <mjx-container>
     if let Ok(sel) = Selector::parse("mjx-container") {
         for el in doc.select(&sel) {
-            let display = el.value().attr("display").unwrap_or("")
+            let display = el
+                .value()
+                .attr("display")
+                .unwrap_or("")
                 .eq_ignore_ascii_case("block")
                 || el.value().attr("class").unwrap_or("").contains("display");
             if let Some(latex) = extract_latex_source(&el) {
                 let display_attr = if display { "block" } else { "inline" };
                 let canonical = format!(
                     "<math data-latex=\"{}\" display=\"{}\"></math>",
-                    escape_attr(&latex), display_attr
+                    escape_attr(&latex),
+                    display_attr
                 );
                 replacements.push((el.html(), canonical));
             }
@@ -43,7 +45,8 @@ pub fn standardize_math(html: &str) -> String {
                 let display_attr = if display { "block" } else { "inline" };
                 let canonical = format!(
                     "<math data-latex=\"{}\" display=\"{}\"></math>",
-                    escape_attr(&latex), display_attr
+                    escape_attr(&latex),
+                    display_attr
                 );
                 replacements.push((el.html(), canonical));
             }
@@ -53,12 +56,17 @@ pub fn standardize_math(html: &str) -> String {
     // KaTeX: <span class="katex">
     if let Ok(sel) = Selector::parse("span.katex") {
         for el in doc.select(&sel) {
-            let display = el.value().attr("class").unwrap_or("").contains("katex-display");
+            let display = el
+                .value()
+                .attr("class")
+                .unwrap_or("")
+                .contains("katex-display");
             if let Some(latex) = extract_latex_source(&el) {
                 let display_attr = if display { "block" } else { "inline" };
                 let canonical = format!(
                     "<math data-latex=\"{}\" display=\"{}\"></math>",
-                    escape_attr(&latex), display_attr
+                    escape_attr(&latex),
+                    display_attr
                 );
                 replacements.push((el.html(), canonical));
             }

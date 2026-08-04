@@ -13,11 +13,7 @@ pub fn convert_unordered_item(
 }
 
 /// Convert `<li>` content for an ordered list item.
-pub fn convert_ordered_item(
-    inner: &str,
-    counter: usize,
-    state: &ConversionState,
-) -> String {
+pub fn convert_ordered_item(inner: &str, counter: usize, state: &ConversionState) -> String {
     let indent = "  ".repeat(state.list_depth.saturating_sub(1));
     let trimmed = inner.trim();
     format!("{}{}. {}\n", indent, counter, trimmed)

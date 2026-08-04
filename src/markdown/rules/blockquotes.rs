@@ -106,7 +106,11 @@ mod tests {
         assert!(trimmed.contains("> para1"));
         assert!(trimmed.contains("> para2"));
         // One blank > line between paragraphs is OK, but NOT two consecutive
-        assert!(!trimmed.contains(">\n>\n>"), "triple empty quote lines: {}", trimmed);
+        assert!(
+            !trimmed.contains(">\n>\n>"),
+            "triple empty quote lines: {}",
+            trimmed
+        );
     }
 
     #[test]
@@ -114,6 +118,10 @@ mod tests {
         // Whitespace-only lines between paragraphs
         let result = convert_blockquote("\n\npara1\n  \n  \npara2\n\n", 1, None);
         let trimmed = result.trim();
-        assert!(!trimmed.contains(">\n>\n>"), "triple empty quote: {}", trimmed);
+        assert!(
+            !trimmed.contains(">\n>\n>"),
+            "triple empty quote: {}",
+            trimmed
+        );
     }
 }

@@ -1,5 +1,5 @@
-use readabilityrs::{MarkdownOptions, Readability, ReadabilityOptions};
 use readabilityrs::markdown::options::{HeadingStyle, LinkStyle};
+use readabilityrs::{MarkdownOptions, Readability, ReadabilityOptions};
 
 /// Helper: convert HTML fragment to markdown via the public API.
 fn html_to_md(html: &str) -> String {
@@ -130,9 +130,7 @@ fn test_blockquote() {
 
 #[test]
 fn test_blockquote_callout() {
-    let md = html_to_md(
-        r#"<blockquote data-callout="warning"><p>Be careful!</p></blockquote>"#,
-    );
+    let md = html_to_md(r#"<blockquote data-callout="warning"><p>Be careful!</p></blockquote>"#);
     assert!(md.contains("> [!WARNING]"));
     assert!(md.contains("> Be careful!"));
 }
@@ -154,15 +152,15 @@ fn test_simple_table() {
 
 #[test]
 fn test_inline_math() {
-    let md = html_to_md(r#"<p>The formula <math data-latex="x^2" display="inline"></math> is simple.</p>"#);
+    let md = html_to_md(
+        r#"<p>The formula <math data-latex="x^2" display="inline"></math> is simple.</p>"#,
+    );
     assert!(md.contains("$x^2$"));
 }
 
 #[test]
 fn test_block_math() {
-    let md = html_to_md(
-        r#"<math data-latex="E = mc^2" display="block"></math>"#,
-    );
+    let md = html_to_md(r#"<math data-latex="E = mc^2" display="block"></math>"#);
     assert!(md.contains("$$E = mc^2$$"));
 }
 
@@ -194,7 +192,8 @@ fn test_horizontal_rule() {
 
 #[test]
 fn test_prism_code_standardization() {
-    let html = r#"<pre class="language-python"><code class="language-python">print("hello")</code></pre>"#;
+    let html =
+        r#"<pre class="language-python"><code class="language-python">print("hello")</code></pre>"#;
     let md = html_to_md(html);
     assert!(md.contains("```python"));
     assert!(md.contains("print(\"hello\")"));
@@ -212,8 +211,10 @@ fn test_brush_wordpress_standardization() {
 #[test]
 fn test_h1_dedup_with_title() {
     let md_opts = MarkdownOptions::default();
-    let standardized =
-        readabilityrs::elements::standardize_all("<h1>My Title</h1><p>Content</p>", Some("My Title"));
+    let standardized = readabilityrs::elements::standardize_all(
+        "<h1>My Title</h1><p>Content</p>",
+        Some("My Title"),
+    );
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
     // h1 matching title should be removed
     assert!(!md.contains("# My Title"));
@@ -361,7 +362,11 @@ fn test_escape_underscores_in_text() {
 fn test_brackets_in_text_not_escaped() {
     // Brackets are NOT escaped — they only form links when paired as [text](url)
     let md = html_to_md("<p>array[0] = value</p>");
-    assert!(md.contains("array[0] = value"), "brackets should not be escaped: {}", md);
+    assert!(
+        md.contains("array[0] = value"),
+        "brackets should not be escaped: {}",
+        md
+    );
 }
 
 #[test]
@@ -502,7 +507,12 @@ fn test_crlf_in_text() {
 fn test_trailing_whitespace_trimmed_in_output() {
     let md = html_to_md("<p>text   </p><p>more text   </p>");
     for line in md.lines() {
-        assert_eq!(line, line.trim_end(), "Trailing whitespace found in: {:?}", line);
+        assert_eq!(
+            line,
+            line.trim_end(),
+            "Trailing whitespace found in: {:?}",
+            line
+        );
     }
 }
 
@@ -588,10 +598,8 @@ fn test_code_block_tilde_fence_option() {
         code_fence: '~',
         ..MarkdownOptions::default()
     };
-    let standardized = readabilityrs::elements::standardize_all(
-        "<pre><code>code here</code></pre>",
-        None,
-    );
+    let standardized =
+        readabilityrs::elements::standardize_all("<pre><code>code here</code></pre>", None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
     assert!(md.contains("~~~"));
     assert!(!md.contains("```"));
@@ -635,9 +643,7 @@ fn test_table_uneven_columns() {
 
 #[test]
 fn test_table_complex_preserved_as_html() {
-    let md = html_to_md(
-        r#"<table><tr><td colspan="2">merged</td></tr></table>"#,
-    );
+    let md = html_to_md(r#"<table><tr><td colspan="2">merged</td></tr></table>"#);
     assert!(md.contains("colspan"));
 }
 
@@ -660,9 +666,7 @@ fn test_nested_unordered_list_2_levels() {
 
 #[test]
 fn test_nested_list_3_levels() {
-    let md = html_to_md(
-        "<ul><li>L1<ul><li>L2<ul><li>L3</li></ul></li></ul></li></ul>",
-    );
+    let md = html_to_md("<ul><li>L1<ul><li>L2<ul><li>L3</li></ul></li></ul></li></ul>");
     assert!(md.contains("- L1"));
     assert!(md.contains("  - L2"));
     assert!(md.contains("    - L3"));
@@ -714,10 +718,7 @@ fn test_setext_heading_style() {
         heading_style: HeadingStyle::Setext,
         ..MarkdownOptions::default()
     };
-    let standardized = readabilityrs::elements::standardize_all(
-        "<h2>Subtitle</h2>",
-        None,
-    );
+    let standardized = readabilityrs::elements::standardize_all("<h2>Subtitle</h2>", None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
     assert!(md.contains("Subtitle\n---") || md.contains("Subtitle\n-"));
 }
@@ -728,10 +729,7 @@ fn test_custom_bullet_char() {
         bullet_char: '+',
         ..MarkdownOptions::default()
     };
-    let standardized = readabilityrs::elements::standardize_all(
-        "<ul><li>item</li></ul>",
-        None,
-    );
+    let standardized = readabilityrs::elements::standardize_all("<ul><li>item</li></ul>", None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
     assert!(md.contains("+ item"));
 }
@@ -773,10 +771,8 @@ fn test_tilde_code_fence() {
         code_fence: '~',
         ..MarkdownOptions::default()
     };
-    let standardized = readabilityrs::elements::standardize_all(
-        "<pre><code>code</code></pre>",
-        None,
-    );
+    let standardized =
+        readabilityrs::elements::standardize_all("<pre><code>code</code></pre>", None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
     assert!(md.contains("~~~"));
     assert!(!md.contains("```"));
@@ -853,8 +849,16 @@ fn test_blockquote_p_exact_output() {
 fn test_blockquote_heading_and_p() {
     let md = html_to_md("<blockquote><h2>Title</h2><p>text</p></blockquote>");
     let trimmed = md.trim();
-    assert!(trimmed.contains("> ## Title"), "should have prefixed heading: {}", trimmed);
-    assert!(trimmed.contains("> text"), "should have prefixed text: {}", trimmed);
+    assert!(
+        trimmed.contains("> ## Title"),
+        "should have prefixed heading: {}",
+        trimmed
+    );
+    assert!(
+        trimmed.contains("> text"),
+        "should have prefixed text: {}",
+        trimmed
+    );
 }
 
 #[test]
@@ -862,9 +866,21 @@ fn test_blockquote_code_block() {
     let md = html_to_md(
         r#"<blockquote><pre><code class="language-rust">fn main() {}</code></pre></blockquote>"#,
     );
-    assert!(md.contains("> ```rust"), "code fence missing > prefix: {}", md);
-    assert!(md.contains("> fn main() {}"), "code body missing > prefix: {}", md);
-    assert!(md.contains("> ```"), "closing fence missing > prefix: {}", md);
+    assert!(
+        md.contains("> ```rust"),
+        "code fence missing > prefix: {}",
+        md
+    );
+    assert!(
+        md.contains("> fn main() {}"),
+        "code body missing > prefix: {}",
+        md
+    );
+    assert!(
+        md.contains("> ```"),
+        "closing fence missing > prefix: {}",
+        md
+    );
 }
 
 #[test]
@@ -877,8 +893,16 @@ fn test_nested_blockquote_with_p() {
 fn test_blockquote_multiple_paragraphs() {
     let md = html_to_md("<blockquote><p>first</p><p>second</p></blockquote>");
     let trimmed = md.trim();
-    assert!(trimmed.contains("> first"), "missing first para: {}", trimmed);
-    assert!(trimmed.contains("> second"), "missing second para: {}", trimmed);
+    assert!(
+        trimmed.contains("> first"),
+        "missing first para: {}",
+        trimmed
+    );
+    assert!(
+        trimmed.contains("> second"),
+        "missing second para: {}",
+        trimmed
+    );
 }
 
 // ── Empty figcaption ────────────────────────────────────────────────
@@ -888,7 +912,11 @@ fn test_figure_empty_figcaption_preserves_alt() {
     let md = html_to_md(
         r#"<figure><img alt="A nice photo" src="img.jpg"/><figcaption></figcaption></figure>"#,
     );
-    assert!(md.contains("![A nice photo](img.jpg)"), "alt text lost: {}", md);
+    assert!(
+        md.contains("![A nice photo](img.jpg)"),
+        "alt text lost: {}",
+        md
+    );
 }
 
 // ── Table cells with block content ──────────────────────────────────
@@ -903,7 +931,11 @@ fn test_table_cell_with_p_single_line() {
     // Each table row line should be single-line (no embedded newlines)
     for line in md.lines() {
         if line.starts_with('|') && line.ends_with('|') {
-            assert!(!line[1..line.len()-1].contains('\n'), "multiline cell: {}", line);
+            assert!(
+                !line[1..line.len() - 1].contains('\n'),
+                "multiline cell: {}",
+                line
+            );
         }
     }
 }
@@ -927,11 +959,22 @@ fn test_real_world_ars_1() {
     let standardized = readabilityrs::elements::standardize_all(&html, None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
 
-    assert!(!md.trim().is_empty(), "ars-1 should produce non-empty markdown");
+    assert!(
+        !md.trim().is_empty(),
+        "ars-1 should produce non-empty markdown"
+    );
     assert!(md.contains("]("), "ars-1 should contain links");
-    assert!(!md.contains("\n\n\n"), "ars-1 should have no triple newlines");
+    assert!(
+        !md.contains("\n\n\n"),
+        "ars-1 should have no triple newlines"
+    );
     for line in md.lines() {
-        assert_eq!(line, line.trim_end(), "ars-1 trailing whitespace: {:?}", line);
+        assert_eq!(
+            line,
+            line.trim_end(),
+            "ars-1 trailing whitespace: {:?}",
+            line
+        );
     }
 }
 
@@ -943,10 +986,21 @@ fn test_real_world_buzzfeed_1() {
     let standardized = readabilityrs::elements::standardize_all(&html, None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
 
-    assert!(!md.trim().is_empty(), "buzzfeed-1 should produce non-empty markdown");
-    assert!(!md.contains("\n\n\n"), "buzzfeed-1 should have no triple newlines");
+    assert!(
+        !md.trim().is_empty(),
+        "buzzfeed-1 should produce non-empty markdown"
+    );
+    assert!(
+        !md.contains("\n\n\n"),
+        "buzzfeed-1 should have no triple newlines"
+    );
     for line in md.lines() {
-        assert_eq!(line, line.trim_end(), "buzzfeed-1 trailing whitespace: {:?}", line);
+        assert_eq!(
+            line,
+            line.trim_end(),
+            "buzzfeed-1 trailing whitespace: {:?}",
+            line
+        );
     }
 }
 
@@ -1016,7 +1070,10 @@ fn test_all_130_pages_quality_audit() {
         for i in 0..lines.len().saturating_sub(1) {
             let l = lines[i].trim();
             if (l == "-" || l == "+" || l == "*")
-                && lines.get(i + 1).map(|l| l.trim().is_empty()).unwrap_or(false)
+                && lines
+                    .get(i + 1)
+                    .map(|l| l.trim().is_empty())
+                    .unwrap_or(false)
             {
                 failures.push(format!("{}: BARE_BULLET line {}", name, i + 1));
                 break;
@@ -1027,8 +1084,10 @@ fn test_all_130_pages_quality_audit() {
         for i in 0..lines.len().saturating_sub(1) {
             let a = lines[i].trim();
             let b = lines[i + 1].trim();
-            if !a.is_empty() && a.chars().all(|c| c == '>')
-                && !b.is_empty() && b.chars().all(|c| c == '>')
+            if !a.is_empty()
+                && a.chars().all(|c| c == '>')
+                && !b.is_empty()
+                && b.chars().all(|c| c == '>')
             {
                 failures.push(format!("{}: DOUBLE_EMPTY_QUOTE line {}", name, i + 1));
                 break;
@@ -1050,7 +1109,8 @@ fn test_all_130_pages_quality_audit() {
 
         // 9. Table alignment (all rows same pipe count)
         if md.contains("|---") {
-            let table_lines: Vec<&str> = lines.iter()
+            let table_lines: Vec<&str> = lines
+                .iter()
                 .filter(|l| l.trim().starts_with('|') && l.trim().ends_with('|'))
                 .copied()
                 .collect();
@@ -1101,7 +1161,10 @@ fn test_real_world_001() {
     let standardized = readabilityrs::elements::standardize_all(&html, None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
 
-    assert!(!md.trim().is_empty(), "001 should produce non-empty markdown");
+    assert!(
+        !md.trim().is_empty(),
+        "001 should produce non-empty markdown"
+    );
     assert!(!md.contains("\n\n\n"), "001 should have no triple newlines");
     for line in md.lines() {
         assert_eq!(line, line.trim_end(), "001 trailing whitespace: {:?}", line);
@@ -1116,12 +1179,23 @@ fn test_real_world_bbc_1() {
     let standardized = readabilityrs::elements::standardize_all(&html, None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
 
-    assert!(!md.trim().is_empty(), "bbc-1 should produce non-empty markdown");
+    assert!(
+        !md.trim().is_empty(),
+        "bbc-1 should produce non-empty markdown"
+    );
     // BBC article has links
     assert!(md.contains("]("), "bbc-1 should contain links");
-    assert!(!md.contains("\n\n\n"), "bbc-1 should have no triple newlines");
+    assert!(
+        !md.contains("\n\n\n"),
+        "bbc-1 should have no triple newlines"
+    );
     for line in md.lines() {
-        assert_eq!(line, line.trim_end(), "bbc-1 trailing whitespace: {:?}", line);
+        assert_eq!(
+            line,
+            line.trim_end(),
+            "bbc-1 trailing whitespace: {:?}",
+            line
+        );
     }
 }
 
@@ -1133,12 +1207,23 @@ fn test_real_world_wikipedia_2() {
     let standardized = readabilityrs::elements::standardize_all(&html, None);
     let md = readabilityrs::markdown::html_to_markdown(&standardized, &md_opts);
 
-    assert!(!md.trim().is_empty(), "wikipedia-2 should produce non-empty markdown");
+    assert!(
+        !md.trim().is_empty(),
+        "wikipedia-2 should produce non-empty markdown"
+    );
     // Wikipedia has many links
     assert!(md.contains("]("), "wikipedia-2 should contain links");
-    assert!(!md.contains("\n\n\n"), "wikipedia-2 should have no triple newlines");
+    assert!(
+        !md.contains("\n\n\n"),
+        "wikipedia-2 should have no triple newlines"
+    );
     for line in md.lines() {
-        assert_eq!(line, line.trim_end(), "wikipedia-2 trailing whitespace: {:?}", line);
+        assert_eq!(
+            line,
+            line.trim_end(),
+            "wikipedia-2 trailing whitespace: {:?}",
+            line
+        );
     }
 }
 
@@ -1151,7 +1236,11 @@ fn test_real_world_wikipedia_2() {
 #[test]
 fn test_link_with_title_attribute() {
     let md = html_to_md(r#"<a href="https://example.com" title="Visit Example">click</a>"#);
-    assert!(md.contains("[click](https://example.com \"Visit Example\")"), "title missing: {}", md);
+    assert!(
+        md.contains("[click](https://example.com \"Visit Example\")"),
+        "title missing: {}",
+        md
+    );
 }
 
 #[test]
@@ -1164,7 +1253,11 @@ fn test_link_without_title() {
 #[test]
 fn test_image_with_title_attribute() {
     let md = html_to_md(r#"<img src="photo.jpg" alt="A photo" title="My Photo"/>"#);
-    assert!(md.contains("![A photo](photo.jpg \"My Photo\")"), "title missing: {}", md);
+    assert!(
+        md.contains("![A photo](photo.jpg \"My Photo\")"),
+        "title missing: {}",
+        md
+    );
 }
 
 // ── Superscript / subscript ─────────────────────────────────────────
@@ -1186,13 +1279,21 @@ fn test_subscript() {
 #[test]
 fn test_video_with_source_child() {
     let md = html_to_md(r#"<video><source src="movie.mp4" type="video/mp4"/></video>"#);
-    assert!(md.contains("[Video](movie.mp4)"), "video source not found: {}", md);
+    assert!(
+        md.contains("[Video](movie.mp4)"),
+        "video source not found: {}",
+        md
+    );
 }
 
 #[test]
 fn test_audio_with_source_child() {
     let md = html_to_md(r#"<audio><source src="song.mp3" type="audio/mpeg"/></audio>"#);
-    assert!(md.contains("[Audio](song.mp3)"), "audio source not found: {}", md);
+    assert!(
+        md.contains("[Audio](song.mp3)"),
+        "audio source not found: {}",
+        md
+    );
 }
 
 // ── Details/summary preserved as HTML ───────────────────────────────

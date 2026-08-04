@@ -62,10 +62,7 @@ pub fn standardize_footnotes(html: &str) -> String {
                 num
             ));
         }
-        let footnote_block = format!(
-            "<div id=\"footnotes\"><ol>{}</ol></div>",
-            def_items
-        );
+        let footnote_block = format!("<div id=\"footnotes\"><ol>{}</ol></div>", def_items);
         output.push_str(&footnote_block);
     }
 

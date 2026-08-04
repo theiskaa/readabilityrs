@@ -250,11 +250,9 @@ fn clean_styles(html: &str) -> String {
 /// - Collapses multiple spaces into single spaces
 fn normalize_whitespace(html: &str) -> String {
     // Multiple consecutive newlines -> 2 newlines (fast single pass)
-    static MULTI_NEWLINE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
+    static MULTI_NEWLINE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
     // Multiple spaces -> single space
-    static MULTI_SPACE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r" {2,}").unwrap());
+    static MULTI_SPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r" {2,}").unwrap());
 
     let result = MULTI_NEWLINE.replace_all(html, "\n\n");
     let result = MULTI_SPACE.replace_all(&result, " ");
@@ -360,12 +358,15 @@ fn remove_empty_paragraphs(html: &str) -> String {
         Lazy::new(|| Regex::new(r"(?i)<p[^>]*>\s*<span[^>]*>\s*</span>\s*</p>").unwrap());
 
     // Match paragraphs that contain only <span><br></span> (common in Blogger)
-    static BR_SPAN_P_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?i)<p[^>]*>\s*<span[^>]*>\s*<br\s*/?>\s*</span>\s*</p>").unwrap());
+    static BR_SPAN_P_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)<p[^>]*>\s*<span[^>]*>\s*<br\s*/?>\s*</span>\s*</p>").unwrap()
+    });
 
     // Match orphaned <br> tags between block elements (not inside paragraphs)
-    static ORPHAN_BR_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?i)(</(?:p|div|h[1-6])>)\s*(?:<br\s*/?>[\s\n]*)+\s*(<(?:p|div|h[1-6]))").unwrap());
+    static ORPHAN_BR_REGEX: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"(?i)(</(?:p|div|h[1-6])>)\s*(?:<br\s*/?>[\s\n]*)+\s*(<(?:p|div|h[1-6]))")
+            .unwrap()
+    });
 
     let mut html = html.to_string();
 

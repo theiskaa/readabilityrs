@@ -1,8 +1,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static YOUTUBE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)youtube\.com|youtu\.be").unwrap());
+static YOUTUBE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)youtube\.com|youtu\.be").unwrap());
 static TWITTER_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)twitter\.com|x\.com/\w+/status").unwrap());
 

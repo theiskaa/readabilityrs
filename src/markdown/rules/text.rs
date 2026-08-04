@@ -7,7 +7,10 @@ pub fn convert_strong(inner: &str, opts: &MarkdownOptions, _state: &ConversionSt
     if trimmed.is_empty() {
         return String::new();
     }
-    format!("{}{}{}", opts.strong_delimiter, trimmed, opts.strong_delimiter)
+    format!(
+        "{}{}{}",
+        opts.strong_delimiter, trimmed, opts.strong_delimiter
+    )
 }
 
 /// Convert `<em>` / `<i>` content to markdown.
@@ -16,11 +19,18 @@ pub fn convert_emphasis(inner: &str, opts: &MarkdownOptions, _state: &Conversion
     if trimmed.is_empty() {
         return String::new();
     }
-    format!("{}{}{}", opts.emphasis_delimiter, trimmed, opts.emphasis_delimiter)
+    format!(
+        "{}{}{}",
+        opts.emphasis_delimiter, trimmed, opts.emphasis_delimiter
+    )
 }
 
 /// Convert inline `<code>` (not inside `<pre>`) to markdown.
-pub fn convert_inline_code(inner: &str, _opts: &MarkdownOptions, _state: &ConversionState) -> String {
+pub fn convert_inline_code(
+    inner: &str,
+    _opts: &MarkdownOptions,
+    _state: &ConversionState,
+) -> String {
     let trimmed = inner.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -34,7 +44,11 @@ pub fn convert_inline_code(inner: &str, _opts: &MarkdownOptions, _state: &Conver
 }
 
 /// Convert `<del>` / `<s>` / `<strike>` to markdown.
-pub fn convert_strikethrough(inner: &str, _opts: &MarkdownOptions, _state: &ConversionState) -> String {
+pub fn convert_strikethrough(
+    inner: &str,
+    _opts: &MarkdownOptions,
+    _state: &ConversionState,
+) -> String {
     let trimmed = inner.trim();
     if trimmed.is_empty() {
         return String::new();

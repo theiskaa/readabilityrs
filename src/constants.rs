@@ -95,11 +95,10 @@ pub const DIV_TO_P_ELEMS: &[&str] = &[
     "UL",
 ];
 
-
 // Phrasing (inline) elements
 pub const PHRASING_ELEMS: &[&str] = &[
-    "ABBR", "AUDIO", "B", "BDO", "BR", "BUTTON", "CITE", "CODE", "DATA", "DATALIST", "DFN",
-    "EM", "EMBED", "I", "IMG", "INPUT", "KBD", "LABEL", "MARK", "MATH", "METER", "NOSCRIPT",
-    "OBJECT", "OUTPUT", "PROGRESS", "Q", "RUBY", "SAMP", "SCRIPT", "SELECT", "SMALL", "SPAN",
-    "STRONG", "SUB", "SUP", "TEXTAREA", "TIME", "VAR", "WBR",
+    "ABBR", "AUDIO", "B", "BDO", "BR", "BUTTON", "CITE", "CODE", "DATA", "DATALIST", "DFN", "EM",
+    "EMBED", "I", "IMG", "INPUT", "KBD", "LABEL", "MARK", "MATH", "METER", "NOSCRIPT", "OBJECT",
+    "OUTPUT", "PROGRESS", "Q", "RUBY", "SAMP", "SCRIPT", "SELECT", "SMALL", "SPAN", "STRONG",
+    "SUB", "SUP", "TEXTAREA", "TIME", "VAR", "WBR",
 ];

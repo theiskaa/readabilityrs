@@ -842,10 +842,7 @@ fn should_convert_div_to_p(element: ElementRef) -> bool {
 
 /// Count element children (ignoring text/comment nodes).
 fn count_element_children(element: ElementRef) -> usize {
-    element
-        .children()
-        .filter_map(ElementRef::wrap)
-        .count()
+    element.children().filter_map(ElementRef::wrap).count()
 }
 
 fn is_descendant_of(element: ElementRef, ancestor_id: &str) -> bool {
@@ -1021,7 +1018,9 @@ fn find_element_by_id<'a>(document: &'a Html, id: &str) -> Option<ElementRef<'a>
     // For now, search for elements and match by generated ID
 
     let all_selector = Selector::parse("*").unwrap();
-    document.select(&all_selector).find(|&elem| get_element_id(&elem) == id)
+    document
+        .select(&all_selector)
+        .find(|&elem| get_element_id(&elem) == id)
 }
 
 #[cfg(test)]

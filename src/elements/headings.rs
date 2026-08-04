@@ -1,11 +1,9 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static PERMALINK_TEXT_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[#¶§🔗\s]*$").unwrap());
+static PERMALINK_TEXT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[#¶§🔗\s]*$").unwrap());
 
-static H1_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?si)<h1[^>]*>(.*?)</h1>").unwrap());
+static H1_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?si)<h1[^>]*>(.*?)</h1>").unwrap());
 
 static HEADING_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?si)(<h[1-6][^>]*>)(.*?)(</h[1-6]>)").unwrap());
@@ -22,24 +20,26 @@ pub fn standardize_headings(html: &str, title: Option<&str>) -> String {
     let mut first_h1 = true;
 
     // Process h1 elements
-    output = H1_RE.replace_all(&output, |caps: &regex::Captures| {
-        let inner = caps[1].to_string();
-        let text = strip_html_tags(&inner);
-        let text_normalized = normalize_title_text(&text);
+    output = H1_RE
+        .replace_all(&output, |caps: &regex::Captures| {
+            let inner = caps[1].to_string();
+            let text = strip_html_tags(&inner);
+            let text_normalized = normalize_title_text(&text);
 
-        if first_h1 {
-            first_h1 = false;
-            if let Some(t) = title {
-                let title_normalized = normalize_title_text(t);
-                if text_normalized == title_normalized {
-                    return String::new();
+            if first_h1 {
+                first_h1 = false;
+                if let Some(t) = title {
+                    let title_normalized = normalize_title_text(t);
+                    if text_normalized == title_normalized {
+                        return String::new();
+                    }
                 }
             }
-        }
 
-        // Rename h1 → h2
-        format!("<h2>{}</h2>", inner)
-    }).to_string();
+            // Rename h1 → h2
+            format!("<h2>{}</h2>", inner)
+        })
+        .to_string();
 
     // Strip permalink anchors from all headings
     output = strip_permalink_anchors(&output);
@@ -50,22 +50,25 @@ pub fn standardize_headings(html: &str, title: Option<&str>) -> String {
 /// Remove anchor links inside headings that look like permalink markers.
 fn strip_permalink_anchors(html: &str) -> String {
     // Only process anchors that are inside heading tags
-    HEADING_RE.replace_all(html, |caps: &regex::Captures| {
-        let open_tag = &caps[1];
-        let inner = &caps[2];
-        let close_tag = &caps[3];
+    HEADING_RE
+        .replace_all(html, |caps: &regex::Captures| {
+            let open_tag = &caps[1];
+            let inner = &caps[2];
+            let close_tag = &caps[3];
 
-        let cleaned_inner = ANCHOR_IN_HEADING_RE.replace_all(inner, |acaps: &regex::Captures| {
-            let link_text = acaps.get(1).map(|m| m.as_str()).unwrap_or("");
-            if link_text.trim().is_empty() || PERMALINK_TEXT_RE.is_match(link_text.trim()) {
-                String::new()
-            } else {
-                link_text.to_string()
-            }
-        });
+            let cleaned_inner =
+                ANCHOR_IN_HEADING_RE.replace_all(inner, |acaps: &regex::Captures| {
+                    let link_text = acaps.get(1).map(|m| m.as_str()).unwrap_or("");
+                    if link_text.trim().is_empty() || PERMALINK_TEXT_RE.is_match(link_text.trim()) {
+                        String::new()
+                    } else {
+                        link_text.to_string()
+                    }
+                });
 
-        format!("{}{}{}", open_tag, cleaned_inner, close_tag)
-    }).to_string()
+            format!("{}{}{}", open_tag, cleaned_inner, close_tag)
+        })
+        .to_string()
 }
 
 static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());

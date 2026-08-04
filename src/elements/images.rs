@@ -1,80 +1,99 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static BASE64_PLACEHOLDER_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^data:image/(gif|png|jpeg|svg);base64,[A-Za-z0-9+/=]{0,200}$").unwrap());
+static BASE64_PLACEHOLDER_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^data:image/(gif|png|jpeg|svg);base64,[A-Za-z0-9+/=]{0,200}$").unwrap()
+});
 
 static SRCSET_ENTRY_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\S+)\s+(\d+\.?\d*)([wx])").unwrap());
 
-static IMG_TAG_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?si)<img\s[^>]*?/?>").unwrap());
+static IMG_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?si)<img\s[^>]*?/?>").unwrap());
 
-static WIDTH_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"width="(\d+)""#).unwrap());
+static WIDTH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"width="(\d+)""#).unwrap());
 
-static HEIGHT_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"height="(\d+)""#).unwrap());
+static HEIGHT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"height="(\d+)""#).unwrap());
 
-static SRC_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"\ssrc="([^"]*)""#).unwrap());
+static SRC_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\ssrc="([^"]*)""#).unwrap());
 
-static DATA_SRC_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"data-src="([^"]*)""#).unwrap());
+static DATA_SRC_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"data-src="([^"]*)""#).unwrap());
 
-static DATA_SRCSET_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"data-srcset="([^"]*)""#).unwrap());
+static DATA_SRCSET_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"data-srcset="([^"]*)""#).unwrap());
 
-static SRCSET_ATTR_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"srcset="([^"]*)""#).unwrap());
+static SRCSET_ATTR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"srcset="([^"]*)""#).unwrap());
 
 /// Standardize images:
 /// 1. Resolve lazy-loaded images (`data-src` → `src`).
 /// 2. Pick best source from `srcset`.
 /// 3. Remove tiny images (width AND height both < 100).
 pub fn standardize_images(html: &str) -> String {
-    IMG_TAG_RE.replace_all(html, |caps: &regex::Captures| {
-        let full = &caps[0];
+    IMG_TAG_RE
+        .replace_all(html, |caps: &regex::Captures| {
+            let full = &caps[0];
 
-        // Check for small images
-        let width: Option<u32> = WIDTH_RE.captures(full).and_then(|c| c[1].parse().ok());
-        let height: Option<u32> = HEIGHT_RE.captures(full).and_then(|c| c[1].parse().ok());
-        if let (Some(w), Some(h)) = (width, height) {
-            if w < 100 && h < 100 {
-                return String::new();
-            }
-        }
-
-        // Resolve lazy-loaded src
-        let src = SRC_RE.captures(full).map(|c| c[1].to_string()).unwrap_or_default();
-        let data_src = DATA_SRC_RE.captures(full).map(|c| c[1].to_string()).unwrap_or_default();
-
-        let mut result = full.to_string();
-
-        if (src.is_empty() || is_placeholder_src(&src)) && !data_src.is_empty() {
-            if src.is_empty() {
-                result = result.replacen("<img", &format!("<img src=\"{}\"", escape_attr(&data_src)), 1);
-            } else {
-                // Use space-prefixed pattern to avoid matching data-src
-                result = replace_src_attr(&result, &src, &escape_attr(&data_src));
-            }
-        }
-
-        // Handle srcset / data-srcset
-        let srcset = SRCSET_ATTR_RE.captures(full).map(|c| c[1].to_string()).unwrap_or_default();
-        let data_srcset = DATA_SRCSET_RE.captures(full).map(|c| c[1].to_string()).unwrap_or_default();
-        let effective = if !data_srcset.is_empty() && srcset.is_empty() { &data_srcset } else { &srcset };
-        if !effective.is_empty() {
-            if let Some(best) = pick_best_srcset(effective) {
-                let current_src = SRC_RE.captures(&result).map(|c| c[1].to_string()).unwrap_or_default();
-                if !current_src.is_empty() {
-                    result = replace_src_attr(&result, &current_src, &escape_attr(&best));
+            // Check for small images
+            let width: Option<u32> = WIDTH_RE.captures(full).and_then(|c| c[1].parse().ok());
+            let height: Option<u32> = HEIGHT_RE.captures(full).and_then(|c| c[1].parse().ok());
+            if let (Some(w), Some(h)) = (width, height) {
+                if w < 100 && h < 100 {
+                    return String::new();
                 }
             }
-        }
 
-        result
-    }).to_string()
+            // Resolve lazy-loaded src
+            let src = SRC_RE
+                .captures(full)
+                .map(|c| c[1].to_string())
+                .unwrap_or_default();
+            let data_src = DATA_SRC_RE
+                .captures(full)
+                .map(|c| c[1].to_string())
+                .unwrap_or_default();
+
+            let mut result = full.to_string();
+
+            if (src.is_empty() || is_placeholder_src(&src)) && !data_src.is_empty() {
+                if src.is_empty() {
+                    result = result.replacen(
+                        "<img",
+                        &format!("<img src=\"{}\"", escape_attr(&data_src)),
+                        1,
+                    );
+                } else {
+                    // Use space-prefixed pattern to avoid matching data-src
+                    result = replace_src_attr(&result, &src, &escape_attr(&data_src));
+                }
+            }
+
+            // Handle srcset / data-srcset
+            let srcset = SRCSET_ATTR_RE
+                .captures(full)
+                .map(|c| c[1].to_string())
+                .unwrap_or_default();
+            let data_srcset = DATA_SRCSET_RE
+                .captures(full)
+                .map(|c| c[1].to_string())
+                .unwrap_or_default();
+            let effective = if !data_srcset.is_empty() && srcset.is_empty() {
+                &data_srcset
+            } else {
+                &srcset
+            };
+            if !effective.is_empty() {
+                if let Some(best) = pick_best_srcset(effective) {
+                    let current_src = SRC_RE
+                        .captures(&result)
+                        .map(|c| c[1].to_string())
+                        .unwrap_or_default();
+                    if !current_src.is_empty() {
+                        result = replace_src_attr(&result, &current_src, &escape_attr(&best));
+                    }
+                }
+            }
+
+            result
+        })
+        .to_string()
 }
 
 fn is_placeholder_src(src: &str) -> bool {
