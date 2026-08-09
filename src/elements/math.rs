@@ -1,10 +1,10 @@
-use once_cell::sync::Lazy;
 use scraper::{Html, Selector};
+use std::sync::LazyLock;
 
-static ANN_SEL: Lazy<Option<Selector>> =
-    Lazy::new(|| Selector::parse("annotation[encoding=\"application/x-tex\"]").ok());
-static SCRIPT_SEL: Lazy<Option<Selector>> =
-    Lazy::new(|| Selector::parse("script[type=\"math/tex\"]").ok());
+static ANN_SEL: LazyLock<Option<Selector>> =
+    LazyLock::new(|| Selector::parse("annotation[encoding=\"application/x-tex\"]").ok());
+static SCRIPT_SEL: LazyLock<Option<Selector>> =
+    LazyLock::new(|| Selector::parse("script[type=\"math/tex\"]").ok());
 
 /// Standardize math elements from MathJax/KaTeX to canonical `<math data-latex="...">`.
 ///

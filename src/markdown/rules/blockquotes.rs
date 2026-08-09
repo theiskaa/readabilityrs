@@ -1,8 +1,8 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
-static MULTI_NEWLINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
-static BLANK_LINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n[ \t]*\n").unwrap());
+static MULTI_NEWLINE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
+static BLANK_LINE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n[ \t]*\n").unwrap());
 
 /// Convert `<blockquote>` content to markdown.
 /// `inner` is the already-converted child content.

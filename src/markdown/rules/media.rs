@@ -1,12 +1,13 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 use crate::markdown::options::MarkdownOptions;
 use crate::markdown::rules::text::escape_url_destination;
 
-static YOUTUBE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)youtube\.com|youtu\.be").unwrap());
-static TWITTER_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)twitter\.com|x\.com/\w+/status").unwrap());
+static YOUTUBE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)youtube\.com|youtu\.be").unwrap());
+static TWITTER_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)twitter\.com|x\.com/\w+/status").unwrap());
 
 /// Convert `<iframe>` to markdown placeholder.
 pub fn convert_iframe(src: &str, opts: &MarkdownOptions) -> String {

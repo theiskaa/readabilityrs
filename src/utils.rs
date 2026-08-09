@@ -1,9 +1,9 @@
 //! Utility functions for text processing and manipulation.
 
 use crate::constants::REGEXPS;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use std::borrow::Cow;
+use std::sync::LazyLock;
 
 /// Unescape basic and numeric HTML entities in a string.
 pub fn unescape_html_entities(text: &str) -> String {
@@ -70,8 +70,8 @@ pub fn is_url(s: &str) -> bool {
     url::Url::parse(s).is_ok()
 }
 
-static BY_PREFIX_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)^(by|par)[\s:,\-–—]+").unwrap());
+static BY_PREFIX_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^(by|par)[\s:,\-–—]+").unwrap());
 
 static SOFT_SPACE_CHARS: &[char] = &['\u{00a0}', '\u{200b}', '\u{feff}'];
 

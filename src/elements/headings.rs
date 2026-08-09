@@ -1,15 +1,15 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
-static PERMALINK_TEXT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[#¶§🔗\s]*$").unwrap());
+static PERMALINK_TEXT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[#¶§🔗\s]*$").unwrap());
 
-static H1_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?si)<h1[^>]*>(.*?)</h1>").unwrap());
+static H1_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?si)<h1[^>]*>(.*?)</h1>").unwrap());
 
-static HEADING_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?si)(<h[1-6][^>]*>)(.*?)(</h[1-6]>)").unwrap());
+static HEADING_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?si)(<h[1-6][^>]*>)(.*?)(</h[1-6]>)").unwrap());
 
-static ANCHOR_IN_HEADING_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r##"(?si)<a\s+[^>]*href="#[^"]*"[^>]*>(.*?)</a>"##).unwrap());
+static ANCHOR_IN_HEADING_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r##"(?si)<a\s+[^>]*href="#[^"]*"[^>]*>(.*?)</a>"##).unwrap());
 
 /// Standardize headings:
 /// 1. Remove first `<h1>` if its text matches the article title.
@@ -71,7 +71,7 @@ fn strip_permalink_anchors(html: &str) -> String {
         .to_string()
 }
 
-static HTML_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]+>").unwrap());
+static HTML_TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<[^>]+>").unwrap());
 
 /// Strip all HTML tags from a string to get plain text.
 fn strip_html_tags(html: &str) -> String {

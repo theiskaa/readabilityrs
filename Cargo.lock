@@ -716,7 +716,6 @@ dependencies = [
  "bitflags",
  "criterion",
  "ego-tree",
- "once_cell",
  "regex",
  "scraper",
  "serde",

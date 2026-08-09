@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use scraper::{ElementRef, Html, Node, Selector};
 
 use super::options::MarkdownOptions;
@@ -622,11 +624,11 @@ fn collect_footnote_definitions(el: ElementRef, state: &mut ConversionState) {
 
 /// Post-process the markdown output.
 fn post_process(md: &str) -> String {
-    use once_cell::sync::Lazy;
-    static MULTI_NL: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"\n{3,}").unwrap());
+    static MULTI_NL: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\n{3,}").unwrap());
     // Detect escaped asterisk scene breaks like \*\*\*\*\*\* (3+ escaped stars on a line)
-    static SCENE_BREAK: Lazy<regex::Regex> =
-        Lazy::new(|| regex::Regex::new(r"^(\\\*){3,}$").unwrap());
+    static SCENE_BREAK: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"^(\\\*){3,}$").unwrap());
 
     let mut result = md.to_string();
 
@@ -659,9 +661,8 @@ fn post_process(md: &str) -> String {
 
 /// Remove empty links `[](url)` but preserve image links `![](url)`.
 fn remove_empty_links(s: &str) -> String {
-    use once_cell::sync::Lazy;
-    static EMPTY_LINK_RE: Lazy<regex::Regex> =
-        Lazy::new(|| regex::Regex::new(r"\[]\([^)]*\)").unwrap());
+    static EMPTY_LINK_RE: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\[]\([^)]*\)").unwrap());
 
     let mut result = String::new();
     let mut last = 0;

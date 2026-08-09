@@ -1,7 +1,7 @@
 //! Constants, regular expressions, and static data used throughout the library.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 // Bitflags for parsing strategies
 bitflags::bitflags! {
@@ -15,14 +15,14 @@ bitflags::bitflags! {
 
 // Element tags to score by default
 // Note: DIV is included because many modern websites use DIVs for paragraphs
-pub static DEFAULT_TAGS_TO_SCORE: Lazy<Vec<&'static str>> = Lazy::new(|| {
+pub static DEFAULT_TAGS_TO_SCORE: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
     vec![
         "SECTION", "H2", "H3", "H4", "H5", "H6", "P", "TD", "PRE", "DIV",
     ]
 });
 
 // Regular expressions (compiled once)
-pub static REGEXPS: Lazy<RegexPatterns> = Lazy::new(RegexPatterns::new);
+pub static REGEXPS: LazyLock<RegexPatterns> = LazyLock::new(RegexPatterns::new);
 
 pub struct RegexPatterns {
     pub unlikely_candidates: Regex,

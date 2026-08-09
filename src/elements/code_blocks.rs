@@ -1,16 +1,17 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
 use scraper::{Html, Selector};
+use std::sync::LazyLock;
 
 use super::languages::{is_known_language, normalize_language};
 
-static LANGUAGE_CLASS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^language-(.+)$").unwrap());
-static LANG_CLASS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)^lang-(.+)$").unwrap());
-static HIGHLIGHT_SOURCE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)^highlight-source-(.+)$").unwrap());
-static BRUSH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)brush:\s*(\w+)").unwrap());
-static LINE_NUMBER_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?m)^\s*\d+[\s|]").unwrap());
-static MULTI_NEWLINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
+static LANGUAGE_CLASS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^language-(.+)$").unwrap());
+static LANG_CLASS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^lang-(.+)$").unwrap());
+static HIGHLIGHT_SOURCE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)^highlight-source-(.+)$").unwrap());
+static BRUSH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)brush:\s*(\w+)").unwrap());
+static LINE_NUMBER_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*\d+[\s|]").unwrap());
+static MULTI_NEWLINE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
 
 /// Standardize all code blocks in the HTML to canonical `<pre><code class="language-x">` form.
 ///

@@ -3,10 +3,10 @@
 use crate::constants::REGEXPS;
 use crate::error::Result;
 use ego_tree::NodeId;
-use once_cell::sync::Lazy;
 use regex::{Captures, Regex};
 use scraper::{ElementRef, Html, Node as ScraperNode, Selector};
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 /// Clean and post-process extracted article content (light version)
 ///
@@ -47,9 +47,9 @@ fn fix_relative_urls_in_html(html: &str, _base_url: &str) -> String {
 
 /// Remove nav-like sections using lightweight regex patterns.
 fn remove_nav_like_sections(html: &str) -> String {
-    static NAV_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?is)<nav\b[^>]*?>.*?</nav>").unwrap());
-    static NAV_WRAPPER_REGEXES: Lazy<Vec<Regex>> = Lazy::new(|| {
+    static NAV_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?is)<nav\b[^>]*?>.*?</nav>").unwrap());
+    static NAV_WRAPPER_REGEXES: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         let tags = ["div", "section", "ul", "ol"];
         // Note: "widget" is intentionally excluded from this regex-based removal because
         // page builders (Elementor, Divi, etc.) use "widget" in class names for ALL content
@@ -112,8 +112,8 @@ fn remove_conditionally_dom(html: &str) -> Option<String> {
 /// Regex for comment-related patterns that should always be removed.
 /// These are user-generated content sections, not article content.
 /// Matches Mozilla Readability's unlikelyCandidates for comments.
-static COMMENT_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?i)comment|disqus|remark|replies|respond").unwrap());
+static COMMENT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)comment|disqus|remark|replies|respond").unwrap());
 
 /// Check if a class/id string indicates a comment section.
 fn is_comment_section(class_id: &str) -> bool {
@@ -133,7 +133,7 @@ fn remove_conditionally_regex(html: &str) -> String {
 
 /// Block-matching regex per tag cleaned by [`remove_conditionally_regex`].
 /// Only those five tags are ever passed in, so the set is fixed at compile time.
-static BLOCK_REGEXES: Lazy<HashMap<&'static str, Regex>> = Lazy::new(|| {
+static BLOCK_REGEXES: LazyLock<HashMap<&'static str, Regex>> = LazyLock::new(|| {
     ["table", "ul", "ol", "div", "section"]
         .into_iter()
         .filter_map(|tag| {
@@ -159,44 +159,45 @@ fn remove_blocks_for_tag(html: &str, tag: &str) -> String {
     .to_string()
 }
 
-static WRAPPER_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("div.__rrs_conditional_wrapper").unwrap());
-static LINK_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("a").unwrap());
-static P_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("p").unwrap());
-static IMG_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("img").unwrap());
-static LI_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("li").unwrap());
-static INPUT_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("input").unwrap());
-static IFRAME_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("iframe").unwrap());
-static EMBED_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("embed").unwrap());
-static OBJECT_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("object").unwrap());
-static H1_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h1").unwrap());
-static H2_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h2").unwrap());
-static H3_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h3").unwrap());
-static H4_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h4").unwrap());
-static H5_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h5").unwrap());
-static H6_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h6").unwrap());
+static WRAPPER_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("div.__rrs_conditional_wrapper").unwrap());
+static LINK_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("a").unwrap());
+static P_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("p").unwrap());
+static IMG_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("img").unwrap());
+static LI_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("li").unwrap());
+static INPUT_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("input").unwrap());
+static IFRAME_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("iframe").unwrap());
+static EMBED_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("embed").unwrap());
+static OBJECT_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("object").unwrap());
+static H1_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("h1").unwrap());
+static H2_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("h2").unwrap());
+static H3_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("h3").unwrap());
+static H4_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("h4").unwrap());
+static H5_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("h5").unwrap());
+static H6_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("h6").unwrap());
 
 // Selectors used by the scraper-based DOM cleanup path.
-static BODY_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("body").unwrap());
-static TABLE_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("table").unwrap());
-static TR_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("tr").unwrap());
-static CAPTION_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("caption").unwrap());
-static DATA_TABLE_DESCENDANT_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("col, colgroup, tfoot, thead, th").unwrap());
-static UL_OL_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("ul, ol").unwrap());
-static EMBED_GROUP_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("object, embed, iframe").unwrap());
-static HEADINGS_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("h1, h2, h3, h4, h5, h6").unwrap());
-static TEXTISH_SELECTOR: Lazy<Selector> = Lazy::new(|| {
+static BODY_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("body").unwrap());
+static TABLE_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("table").unwrap());
+static TR_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("tr").unwrap());
+static CAPTION_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("caption").unwrap());
+static DATA_TABLE_DESCENDANT_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("col, colgroup, tfoot, thead, th").unwrap());
+static UL_OL_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("ul, ol").unwrap());
+static EMBED_GROUP_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("object, embed, iframe").unwrap());
+static HEADINGS_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("h1, h2, h3, h4, h5, h6").unwrap());
+static TEXTISH_SELECTOR: LazyLock<Selector> = LazyLock::new(|| {
     Selector::parse("span, li, td, blockquote, dl, div, img, ol, p, pre, table, ul").unwrap()
 });
-static FORM_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("form").unwrap());
-static FIELDSET_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("fieldset").unwrap());
-static DIV_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("div").unwrap());
-static SECTION_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("section").unwrap());
-static UL_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("ul").unwrap());
-static OL_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("ol").unwrap());
+static FORM_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("form").unwrap());
+static FIELDSET_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("fieldset").unwrap());
+static DIV_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("div").unwrap());
+static SECTION_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("section").unwrap());
+static UL_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("ul").unwrap());
+static OL_SELECTOR: LazyLock<Selector> = LazyLock::new(|| Selector::parse("ol").unwrap());
 
 fn cleanup_tag_selector(tag: &str) -> Option<&'static Selector> {
     match tag {
@@ -364,8 +365,9 @@ fn count_multi_in_wrapper(wrapper: &Option<ElementRef>, selectors: &[&Selector])
 }
 
 fn extract_class_and_id(fragment: &str) -> String {
-    static CLASS_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)class="([^"]*)""#).unwrap());
-    static ID_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r#"(?i)id="([^"]*)""#).unwrap());
+    static CLASS_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?i)class="([^"]*)""#).unwrap());
+    static ID_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?i)id="([^"]*)""#).unwrap());
 
     let class = CLASS_REGEX
         .captures(fragment)
@@ -436,8 +438,8 @@ fn parse_element(html: &str) -> Option<(&str, &str, &str, &str)> {
 
 /// Replace BRs in text/content (no wrapping element)
 fn replace_brs_in_content(content: &str) -> String {
-    static BR_RUN_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?i)(<br\s*/?>(\s|&nbsp;?)*){2,}").unwrap());
+    static BR_RUN_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)(<br\s*/?>(\s|&nbsp;?)*){2,}").unwrap());
     let br_regex = &*BR_RUN_REGEX;
     if !br_regex.is_match(content) {
         return content.to_string();
@@ -472,12 +474,12 @@ fn replace_brs_in_content(content: &str) -> String {
 pub fn prep_document(html: &str) -> String {
     let mut html = html.to_string();
 
-    static FONT_OPEN_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"<font\b").unwrap());
-    static FONT_CLOSE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"</font>").unwrap());
-    static NOSCRIPT_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?is)<noscript\b[^>]*>(.*?)</noscript>").unwrap());
-    static FORM_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?i)<form\b[^>]*>[\s\S]*?</form>").unwrap());
+    static FONT_OPEN_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"<font\b").unwrap());
+    static FONT_CLOSE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"</font>").unwrap());
+    static NOSCRIPT_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?is)<noscript\b[^>]*>(.*?)</noscript>").unwrap());
+    static FORM_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)<form\b[^>]*>[\s\S]*?</form>").unwrap());
 
     html = FONT_OPEN_REGEX.replace_all(&html, "<span").to_string();
     html = FONT_CLOSE_REGEX.replace_all(&html, "</span>").to_string();
@@ -498,8 +500,8 @@ pub fn prep_document(html: &str) -> String {
     html
 }
 
-static UNSAFE_ELEMENT_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("script, style, noscript, template").unwrap());
+static UNSAFE_ELEMENT_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("script, style, noscript, template").unwrap());
 
 /// Detach script, style, noscript and template elements from a parsed document.
 ///

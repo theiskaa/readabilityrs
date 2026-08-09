@@ -1,26 +1,29 @@
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
-static BASE64_PLACEHOLDER_RE: Lazy<Regex> = Lazy::new(|| {
+static BASE64_PLACEHOLDER_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^data:image/(gif|png|jpeg|svg);base64,[A-Za-z0-9+/=]{0,200}$").unwrap()
 });
 
-static SRCSET_ENTRY_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\S+)\s+(\d+\.?\d*)([wx])").unwrap());
+static SRCSET_ENTRY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(\S+)\s+(\d+\.?\d*)([wx])").unwrap());
 
-static IMG_TAG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?si)<img\s[^>]*?/?>").unwrap());
+static IMG_TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?si)<img\s[^>]*?/?>").unwrap());
 
-static WIDTH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"width="(\d+)""#).unwrap());
+static WIDTH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"width="(\d+)""#).unwrap());
 
-static HEIGHT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"height="(\d+)""#).unwrap());
+static HEIGHT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"height="(\d+)""#).unwrap());
 
-static SRC_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"\ssrc="([^"]*)""#).unwrap());
+static SRC_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\ssrc="([^"]*)""#).unwrap());
 
-static DATA_SRC_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"data-src="([^"]*)""#).unwrap());
+static DATA_SRC_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"data-src="([^"]*)""#).unwrap());
 
-static DATA_SRCSET_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"data-srcset="([^"]*)""#).unwrap());
+static DATA_SRCSET_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"data-srcset="([^"]*)""#).unwrap());
 
-static SRCSET_ATTR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r#"srcset="([^"]*)""#).unwrap());
+static SRCSET_ATTR_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"srcset="([^"]*)""#).unwrap());
 
 /// Standardize images:
 /// 1. Resolve lazy-loaded images (`data-src` → `src`).

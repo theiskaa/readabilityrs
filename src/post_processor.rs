@@ -3,9 +3,9 @@
 //! This module implements Mozilla's _prepArticle pipeline, which cleans
 //! the extracted article content by removing unwanted elements.
 
-use once_cell::sync::Lazy;
 use regex::Regex;
 use scraper::{Html, Selector};
+use std::sync::LazyLock;
 
 /// Remove the title element from the article content if it matches the extracted title.
 ///
@@ -89,20 +89,22 @@ fn remove_heading_by_regex(html: &str, tag: &str, text: &str) -> String {
 /// Clean up whitespace and empty elements after title removal
 fn cleanup_after_title_removal(html: &str) -> String {
     // Patterns for empty wrapper elements that might be left behind
-    static EMPTY_HEADER_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?is)<header[^>]*>\s*</header>").unwrap());
-    static EMPTY_HGROUP_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?is)<hgroup[^>]*>\s*</hgroup>").unwrap());
-    static EMPTY_DIV_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?is)<div[^>]*>\s*</div>").unwrap());
-    static EMPTY_SECTION_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?is)<section[^>]*>\s*</section>").unwrap());
+    static EMPTY_HEADER_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?is)<header[^>]*>\s*</header>").unwrap());
+    static EMPTY_HGROUP_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?is)<hgroup[^>]*>\s*</hgroup>").unwrap());
+    static EMPTY_DIV_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?is)<div[^>]*>\s*</div>").unwrap());
+    static EMPTY_SECTION_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?is)<section[^>]*>\s*</section>").unwrap());
 
     // Collapse multiple consecutive newlines/whitespace into single newline
-    static MULTI_NEWLINE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n\s*\n\s*\n").unwrap());
+    static MULTI_NEWLINE_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\n\s*\n\s*\n").unwrap());
 
     // Clean up whitespace-only lines (lines with only spaces/tabs)
-    static WHITESPACE_LINE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n[ \t]+\n").unwrap());
+    static WHITESPACE_LINE_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\n[ \t]+\n").unwrap());
 
     let mut result = html.to_string();
 
@@ -133,7 +135,7 @@ fn cleanup_after_title_removal(html: &str) -> String {
 
 /// Normalize text for title comparison: lowercase, collapse whitespace, trim
 fn normalize_text(text: &str) -> String {
-    static WHITESPACE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
+    static WHITESPACE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+").unwrap());
     WHITESPACE_REGEX
         .replace_all(text.trim(), " ")
         .to_lowercase()
@@ -207,16 +209,16 @@ pub fn prep_article(html: &str, clean_styles_opt: bool, clean_whitespace_opt: bo
 /// cellpadding, cellspacing, frame, hspace, rules, valign, vspace
 fn clean_styles(html: &str) -> String {
     // Simple and fast: just remove style attributes with pre-compiled regexes
-    static STYLE_DOUBLE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r#"(?i)\s+style\s*=\s*"[^"]*""#).unwrap());
-    static STYLE_SINGLE: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r#"(?i)\s+style\s*=\s*'[^']*'"#).unwrap());
-    static ALIGN: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r#"(?i)\s+align\s*=\s*["'][^"']*["']"#).unwrap());
-    static BGCOLOR: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r#"(?i)\s+bgcolor\s*=\s*["'][^"']*["']"#).unwrap());
-    static VALIGN: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r#"(?i)\s+valign\s*=\s*["'][^"']*["']"#).unwrap());
+    static STYLE_DOUBLE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?i)\s+style\s*=\s*"[^"]*""#).unwrap());
+    static STYLE_SINGLE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?i)\s+style\s*=\s*'[^']*'"#).unwrap());
+    static ALIGN: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?i)\s+align\s*=\s*["'][^"']*["']"#).unwrap());
+    static BGCOLOR: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?i)\s+bgcolor\s*=\s*["'][^"']*["']"#).unwrap());
+    static VALIGN: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?i)\s+valign\s*=\s*["'][^"']*["']"#).unwrap());
 
     let mut result = html.to_string();
     result = STYLE_DOUBLE.replace_all(&result, "").to_string();
@@ -234,9 +236,9 @@ fn clean_styles(html: &str) -> String {
 /// - Collapses multiple spaces into single spaces
 fn normalize_whitespace(html: &str) -> String {
     // Multiple consecutive newlines -> 2 newlines (fast single pass)
-    static MULTI_NEWLINE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\n{3,}").unwrap());
+    static MULTI_NEWLINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
     // Multiple spaces -> single space
-    static MULTI_SPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r" {2,}").unwrap());
+    static MULTI_SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r" {2,}").unwrap());
 
     let result = MULTI_NEWLINE.replace_all(html, "\n\n");
     let result = MULTI_SPACE.replace_all(&result, " ");
@@ -248,7 +250,7 @@ fn normalize_whitespace(html: &str) -> String {
 /// Removes: forms, fieldsets, footer, aside, object, embed, iframe,
 /// input, textarea, select, button
 fn remove_unwanted_elements(html: &str) -> String {
-    static UNWANTED_TAG_REGEXES: Lazy<Vec<Regex>> = Lazy::new(|| {
+    static UNWANTED_TAG_REGEXES: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         [
             r"(?is)<form\b[^>]*?>.*?</form>",
             r"(?is)<fieldset\b[^>]*?>.*?</fieldset>",
@@ -304,7 +306,7 @@ fn build_wrapper_regexes(tags: &[&str], keywords: &[&str]) -> Vec<Regex> {
 ///
 /// Removes elements with "share" or "social" in their class/id
 fn remove_share_elements(html: &str) -> String {
-    static SHARE_REGEXES: Lazy<Vec<Regex>> = Lazy::new(|| {
+    static SHARE_REGEXES: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         build_wrapper_regexes(
             &["div", "span", "aside", "section"],
             &["share", "social", "sharedaddy"],
@@ -321,9 +323,9 @@ fn remove_share_elements(html: &str) -> String {
 
 /// Remove navigation lists and menu sections
 fn remove_navigation_elements(html: &str) -> String {
-    static NAV_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?is)<nav\b[^>]*?>.*?</nav>").unwrap());
-    static NAV_WRAPPER_REGEXES: Lazy<Vec<Regex>> = Lazy::new(|| {
+    static NAV_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?is)<nav\b[^>]*?>.*?</nav>").unwrap());
+    static NAV_WRAPPER_REGEXES: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         build_wrapper_regexes(
             &["div", "section", "ul", "ol"],
             &["nav", "navbar", "menu", "breadcrumbs"],
@@ -341,20 +343,20 @@ fn remove_navigation_elements(html: &str) -> String {
 /// Remove empty paragraphs (paragraphs with no text and no media elements)
 fn remove_empty_paragraphs(html: &str) -> String {
     // Match empty paragraphs - with no content or only whitespace/br tags
-    static EMPTY_P_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?i)<p[^>]*>(\s*(<br\s*/?>)?\s*)*</p>").unwrap());
+    static EMPTY_P_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)<p[^>]*>(\s*(<br\s*/?>)?\s*)*</p>").unwrap());
 
     // Match paragraphs that contain only <span></span> or similar empty inline elements
-    static EMPTY_SPAN_P_REGEX: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"(?i)<p[^>]*>\s*<span[^>]*>\s*</span>\s*</p>").unwrap());
+    static EMPTY_SPAN_P_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)<p[^>]*>\s*<span[^>]*>\s*</span>\s*</p>").unwrap());
 
     // Match paragraphs that contain only <span><br></span> (common in Blogger)
-    static BR_SPAN_P_REGEX: Lazy<Regex> = Lazy::new(|| {
+    static BR_SPAN_P_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)<p[^>]*>\s*<span[^>]*>\s*<br\s*/?>\s*</span>\s*</p>").unwrap()
     });
 
     // Match orphaned <br> tags between block elements (not inside paragraphs)
-    static ORPHAN_BR_REGEX: Lazy<Regex> = Lazy::new(|| {
+    static ORPHAN_BR_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?i)(</(?:p|div|h[1-6])>)\s*(?:<br\s*/?>[\s\n]*)+\s*(<(?:p|div|h[1-6]))")
             .unwrap()
     });

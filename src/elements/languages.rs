@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 /// Map of language aliases to canonical names.
 /// Covers 170+ languages mirroring defuddle's coverage.
-static LANGUAGE_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
+static LANGUAGE_MAP: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     let mut m = HashMap::new();
 
     // Common aliases
@@ -233,7 +232,7 @@ static LANGUAGE_MAP: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
 });
 
 /// Known canonical language names for bare class matching.
-static KNOWN_LANGUAGES: Lazy<Vec<&'static str>> = Lazy::new(|| {
+static KNOWN_LANGUAGES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
     vec![
         "python",
         "javascript",

@@ -2,12 +2,12 @@
 
 use crate::constants::REGEXPS;
 use crate::utils;
-use once_cell::sync::Lazy;
 use scraper::node::Node;
 use scraper::{ElementRef, Html, Selector};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 /// Metadata extracted from the document
 #[derive(Debug, Clone, Default)]
@@ -28,8 +28,8 @@ pub struct Metadata {
 pub fn get_json_ld(document: &Html) -> Metadata {
     let mut metadata = Metadata::default();
 
-    static SCHEMA_ORG_CONTEXT_REGEX: Lazy<regex::Regex> =
-        Lazy::new(|| regex::Regex::new(r"^https?://schema\.org/?$").unwrap());
+    static SCHEMA_ORG_CONTEXT_REGEX: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"^https?://schema\.org/?$").unwrap());
 
     let script_selector = Selector::parse("script[type='application/ld+json']").unwrap();
     let schema_regex = &*SCHEMA_ORG_CONTEXT_REGEX;
@@ -252,12 +252,12 @@ fn extract_json_ld_image(parsed: &Value) -> Option<String> {
 /// Supports OpenGraph, Twitter Cards, Dublin Core, and standard meta tags.
 pub fn get_article_metadata(document: &Html, json_ld: Metadata) -> Metadata {
     let mut values: HashMap<String, String> = HashMap::new();
-    static META_PROPERTY_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+    static META_PROPERTY_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
         regex::Regex::new(
             r"(?i)\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name|image:url|image:secure_url|image$)\s*"
         ).unwrap()
     });
-    static META_NAME_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+    static META_NAME_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
         regex::Regex::new(
             r"(?i)^\s*(?:(?:article|dc|dcterm|og|twitter|parsely|weibo:(?:article|webpage))\s*[-\.:]\s*)?(author|author_name|creator|pub-date|description|title|site_name|image|thumbnail)\s*$"
         ).unwrap()
@@ -927,12 +927,12 @@ fn collect_byline_candidate_text(element: ElementRef) -> String {
     raw_text
 }
 
-static ITEMPROP_NAME_SELECTOR: Lazy<Selector> =
-    Lazy::new(|| Selector::parse("[itemprop='name'], [itemprop~='name']").unwrap());
+static ITEMPROP_NAME_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("[itemprop='name'], [itemprop~='name']").unwrap());
 
 fn collect_child_author_names(element: &ElementRef) -> Option<Vec<String>> {
-    static ANCHOR_SELECTOR: Lazy<Selector> =
-        Lazy::new(|| Selector::parse("a").expect("valid anchor selector"));
+    static ANCHOR_SELECTOR: LazyLock<Selector> =
+        LazyLock::new(|| Selector::parse("a").expect("valid anchor selector"));
 
     fn push_unique(names: &mut Vec<String>, candidate: String) {
         if !names
@@ -1435,12 +1435,12 @@ fn extract_title_from_document(document: &Html) -> Option<String> {
 
     // Title separators: | - – — \ / > »
     // Using alternation instead of character class since pipe needs special handling
-    static TITLE_SEPARATOR_REGEX: Lazy<regex::Regex> =
-        Lazy::new(|| regex::Regex::new(r"\s(\||\-|–|—|\\|/|>|»)\s").unwrap());
-    static HIERARCHICAL_SEPARATOR_REGEX: Lazy<regex::Regex> =
-        Lazy::new(|| regex::Regex::new(r"\s[\\//>»]\s").unwrap());
-    static LEADING_SEGMENT_REGEX: Lazy<regex::Regex> =
-        Lazy::new(|| regex::Regex::new(r"(?i)^[^\|\-–—\\//>»]*[\|\-–—\\//>»]").unwrap());
+    static TITLE_SEPARATOR_REGEX: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\s(\||\-|–|—|\\|/|>|»)\s").unwrap());
+    static HIERARCHICAL_SEPARATOR_REGEX: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"\s[\\//>»]\s").unwrap());
+    static LEADING_SEGMENT_REGEX: LazyLock<regex::Regex> =
+        LazyLock::new(|| regex::Regex::new(r"(?i)^[^\|\-–—\\//>»]*[\|\-–—\\//>»]").unwrap());
 
     let sep_regex = &*TITLE_SEPARATOR_REGEX;
 
