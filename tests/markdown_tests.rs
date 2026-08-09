@@ -710,6 +710,20 @@ fn test_multiple_footnotes() {
     assert!(md.contains("First") && md.contains("Second"));
 }
 
+#[test]
+fn test_footnote_definition_metacharacters_escaped() {
+    let md = html_to_md(
+        r##"<p>Text<sup id="fnref1"><a href="#fn:1" class="footnote">1</a></sup></p>
+        <div id="footnotes"><ol><li class="footnote" id="fn:1">see [x](javascript:alert(1))</li></ol></div>"##,
+    );
+    assert!(
+        !md.contains("[x](javascript:"),
+        "footnote content became a live link: {}",
+        md
+    );
+    assert!(md.contains("\\["), "footnote bracket not escaped: {}", md);
+}
+
 // ── 2.11 MarkdownOptions Variations ────────────────────────────────
 
 #[test]
@@ -1313,4 +1327,89 @@ fn test_srcset_decimal_density() {
     let result = readabilityrs::elements::images::pick_best_srcset(srcset);
     // 2x is 2.0, 1.5x is 1.5 — should pick 2x as largest
     assert_eq!(result, Some("large.jpg".to_string()));
+}
+
+// ── Injection / break-out neutralization ────────────────────────────
+
+#[test]
+fn test_image_alt_breakout_is_neutralized() {
+    let md = html_to_md(r#"<p><img src="a.jpg" alt="](javascript:evil()) [x"></p>"#);
+    // The brackets in alt are escaped, so the alt text can never become a live
+    // link destination. Strip the escaped `\]`/`\[` sequences first, then confirm
+    // no live `](javascript:` destination remains.
+    let unescaped_view = md.replace("\\]", "").replace("\\[", "");
+    assert!(
+        !unescaped_view.contains("](javascript:"),
+        "alt broke out into a destination: {}",
+        md
+    );
+    assert!(md.contains("\\]"), "alt bracket not escaped: {}", md);
+    assert!(md.contains("(a.jpg)"), "real src lost: {}", md);
+}
+
+#[test]
+fn test_link_href_with_paren_is_wrapped() {
+    let md = html_to_md(r#"<p><a href="http://e.com/a)b">t</a></p>"#);
+    assert!(
+        md.contains("<http://e.com/a)b>"),
+        "href with ) not wrapped in <>: {}",
+        md
+    );
+}
+
+#[test]
+fn test_link_title_quote_is_escaped() {
+    let md = html_to_md(r#"<p><a href="u" title='a"b'>t</a></p>"#);
+    assert!(md.contains("\\\""), "title quote not escaped: {}", md);
+}
+
+#[test]
+fn test_sanitize_drops_javascript_link_in_pipeline() {
+    let html = r#"
+    <html>
+    <head><title>Sanitize Article</title></head>
+    <body>
+        <article>
+            <h1>Sanitize Article</h1>
+            <p>This is a substantial paragraph of content used to satisfy the.</p>
+            <p>The readability algorithm needs several paragraphs to extract well.</p>
+            <p>Each paragraph carries enough text to clear the character threshold.</p>
+            <p>More filler content here so extraction picks this article body up.</p>
+            <p>And another paragraph to be comfortably above the size threshold.</p>
+            <p>Here is a <a href="javascript:evil()">x</a> dangerous link inline.</p>
+        </article>
+    </body>
+    </html>
+    "#;
+
+    let options = ReadabilityOptions::builder()
+        .output_markdown(true)
+        .sanitize_content(true)
+        .char_threshold(100)
+        .build();
+
+    let readability = Readability::new(html, None, Some(options)).unwrap();
+    let article = readability.parse().expect("article extracted");
+    let md = article.markdown_content.expect("markdown produced");
+
+    assert!(
+        !md.contains("javascript:"),
+        "javascript scheme survived sanitize: {}",
+        md
+    );
+    assert!(
+        !md.contains("](javascript"),
+        "javascript link destination survived: {}",
+        md
+    );
+}
+
+#[test]
+fn test_default_leaves_benign_link_byte_identical() {
+    let md = html_to_md(r#"<p><a href="https://example.com">link</a></p>"#);
+    assert!(
+        md.contains("[link](https://example.com)"),
+        "benign link changed: {}",
+        md
+    );
 }

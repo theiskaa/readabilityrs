@@ -15,6 +15,9 @@ pub struct MarkdownOptions {
     pub link_style: LinkStyle,
     /// Keep complex tables (colspan/rowspan) as raw HTML.
     pub preserve_complex_tables: bool,
+    /// When true, drop `javascript:`/`vbscript:`/non-image `data:` destinations
+    /// from links and images (mirrors `ReadabilityOptions::sanitize_content`).
+    pub sanitize_urls: bool,
 }
 
 /// Heading output style.
@@ -45,6 +48,7 @@ impl Default for MarkdownOptions {
             strong_delimiter: "**".to_string(),
             link_style: LinkStyle::Inline,
             preserve_complex_tables: true,
+            sanitize_urls: false,
         }
     }
 }

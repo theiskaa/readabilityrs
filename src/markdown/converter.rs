@@ -49,7 +49,14 @@ fn convert_children(
                     // Collapse consecutive whitespace to a single space,
                     // mirroring browser behavior for normal flow content.
                     let collapsed = collapse_whitespace(text);
-                    result.push_str(&rules::text::escape_markdown(&collapsed));
+                    let escaped = rules::text::escape_markdown(&collapsed);
+                    if state.in_link {
+                        // Inside a link label, an unescaped bracket would close
+                        // the `[...]` early and let text inject a destination.
+                        result.push_str(&rules::text::escape_link_brackets(&escaped));
+                    } else {
+                        result.push_str(&escaped);
+                    }
                 }
             }
             Node::Element(_) => {
@@ -152,7 +159,7 @@ fn convert_element_inner(
             let alt = el.value().attr("alt").unwrap_or("");
             let src = el.value().attr("src").unwrap_or("");
             let title = el.value().attr("title").unwrap_or("");
-            rules::images::convert_image(alt, src, title)
+            rules::images::convert_image(alt, src, title, opts)
         }
 
         // Figures
@@ -221,21 +228,21 @@ fn convert_element_inner(
         // Media
         "iframe" => {
             let src = el.value().attr("src").unwrap_or("");
-            rules::media::convert_iframe(src)
+            rules::media::convert_iframe(src, opts)
         }
         "video" => {
             let src = el
                 .value()
                 .attr("src")
                 .unwrap_or_else(|| find_source_src(&el).unwrap_or(""));
-            rules::media::convert_video(src)
+            rules::media::convert_video(src, opts)
         }
         "audio" => {
             let src = el
                 .value()
                 .attr("src")
                 .unwrap_or_else(|| find_source_src(&el).unwrap_or(""));
-            rules::media::convert_audio(src)
+            rules::media::convert_audio(src, opts)
         }
 
         // Footnote reference wrapper
@@ -373,7 +380,7 @@ fn convert_figure(el: ElementRef, opts: &MarkdownOptions, state: &mut Conversion
         })
     });
 
-    rules::images::convert_figure(&alt, &src, caption.as_deref())
+    rules::images::convert_figure(&alt, &src, caption.as_deref(), opts)
 }
 
 /// Convert a `<li>` element.
@@ -600,7 +607,14 @@ fn collect_footnote_definitions(el: ElementRef, state: &mut ConversionState) {
             }
 
             if !id.is_empty() && !content.trim().is_empty() {
-                state.footnotes.push((id, content.trim().to_string()));
+                // Content comes from raw `.text()`, so markdown metacharacters in
+                // the source would otherwise become live markup in the emitted
+                // `[^id]: ...` definition. `escape_markdown` handles the inline
+                // set; brackets are escaped on top since it leaves them alone,
+                // and an unescaped `[x](url)` would become a live link.
+                let inline_escaped = rules::text::escape_markdown(content.trim());
+                let escaped = rules::text::escape_link_brackets(&inline_escaped);
+                state.footnotes.push((id, escaped));
             }
         }
     }

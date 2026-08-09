@@ -942,7 +942,7 @@ fn is_unsafe_element(tag: &str) -> bool {
 /// stripped of whitespace/control chars before comparison (not just its prefix),
 /// because browsers do the same while parsing a URL; otherwise a scheme like
 /// `java\tscript:` would bypass a filter that only checks the raw segment.
-fn is_dangerous_url(value: &str) -> bool {
+pub(crate) fn is_dangerous_url(value: &str) -> bool {
     let trimmed = value.trim_start_matches(|c: char| c.is_whitespace() || c.is_control());
 
     let Some((raw_scheme, rest)) = trimmed.split_once(':') else {

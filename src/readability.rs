@@ -215,12 +215,13 @@ impl Readability {
 
                 // Optionally produce markdown output
                 let markdown_content = if self.options.output_markdown {
-                    let md_opts = self
+                    let mut md_opts = self
                         .options
                         .markdown_options
                         .as_ref()
                         .cloned()
                         .unwrap_or_default();
+                    md_opts.sanitize_urls = self.options.sanitize_content;
                     let standardized = crate::elements::standardize_all(
                         &cleaned_html,
                         self.metadata.title.as_deref(),
