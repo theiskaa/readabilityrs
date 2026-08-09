@@ -30,4 +30,45 @@ Here's how to contribute and submit your pull request:
    - Describe your changes in detail and include screenshots if necessary.
 6. Sit back, relax, and wait for your PR to be reviewed. You might have to tweak your contribution or elaborate on your changes. That's OK, don't be afraid to justify your reasoning and ask questions.
 
+## Development
+
+This is a Rust library (edition 2021, MSRV 1.83). Everything runs through Cargo.
+
+| Task | Command |
+|------|---------|
+| Build | `cargo build` |
+| Run all tests | `cargo test` |
+| Check formatting | `cargo fmt --check` |
+| Apply formatting | `cargo fmt` |
+| Lint | `cargo clippy --all-targets -- -D warnings` |
+| Benchmarks | `cargo bench` |
+
+`cargo test` covers the unit tests, the Markdown integration tests, the doctests, and the Mozilla compatibility suite. The Mozilla suite (`cargo test --test mozilla_test_suite`) replays the corpus under `tests/test-pages/` and asserts extraction against each page's `expected.html` and `expected-metadata.json`.
+
+**Never hand-edit fixtures under `tests/test-pages/` to make a test pass.** They are the reference corpus. If your change moves the corpus, that is a real behavior change to explain in the PR — not a fixture to patch.
+
+Before opening a PR, confirm all three gates are green locally (they are what CI enforces):
+
+```
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+`benches/` also holds a Node.js harness that compares against Mozilla's original `@mozilla/readability` (`npm install && node benchmark.js` inside `benches/`).
+
+### Branches and commits
+
+- Branch off `main` with a typed prefix: `feature/…`, `bugfix/…`, `refactor/…`, `chore/…`, `docs/…`.
+- Commit messages are single-line [conventional commits](https://www.conventionalcommits.org): `type(scope): what changed` — for example `feat(readerable): implement full isProbablyReaderable checks`. Types in use: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, `perf`, `ci`. No body.
+
+### Source layout
+
+- `src/readability.rs` — top-level orchestration (`Readability::new` → `parse()` → `Article`).
+- `src/content_extractor.rs` — scoring and candidate selection.
+- `src/cleaner.rs`, `src/post_processor.rs` — pre- and post-processing cleanup.
+- `src/metadata/` — title, byline, language, image, and JSON-LD / meta-tag extraction.
+- `src/elements/`, `src/markdown/` — the optional HTML→Markdown output path.
+- `src/constants.rs` — shared regexes and scoring flags.
+
 Thank you for reading through this contributing guide and welcome to the project!
