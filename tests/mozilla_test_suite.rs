@@ -390,7 +390,7 @@ fn test_single_case_debug() {
 
         if let Some(ref content) = article.content {
             println!("\nContent preview (first 500 chars):");
-            println!("{}", &content.chars().take(500).collect::<String>());
+            println!("{}", content.chars().take(500).collect::<String>());
         }
     } else {
         println!("No article extracted");
@@ -408,7 +408,7 @@ fn test_single_case_debug() {
             println!("Length: {}", art.length);
             if let Some(ref content) = art.content {
                 println!("\nContent preview (first 300 chars):");
-                println!("{}", &content.chars().take(300).collect::<String>());
+                println!("{}", content.chars().take(300).collect::<String>());
             }
         } else {
             println!("Still no article extracted");
@@ -417,6 +417,6 @@ fn test_single_case_debug() {
 
     if let Some(ref expected_html) = test_case.expected_html {
         println!("\nExpected HTML preview (first 500 chars):");
-        println!("{}", &expected_html.chars().take(500).collect::<String>());
+        println!("{}", expected_html.chars().take(500).collect::<String>());
     }
 }
