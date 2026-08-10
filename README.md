@@ -22,7 +22,7 @@ Or in `Cargo.toml`:
 
 ```toml
 [dependencies]
-readabilityrs = "0.1.3"
+readabilityrs = "0.1.4"
 ```
 
 ## Usage

@@ -9,7 +9,7 @@ your row when done.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 025 | Preserve whitespace inside `<pre>`/`<code>` during post-processing (issue #24) | P1 | S | — | **COMMITTED** `46642eb`..`efab09f` on branch `bugfix/preserve-code-whitespace` (unmerged) — split-and-map pass, not the reference commit's placeholder swap (see plan for why); corpus unchanged |
+| 025 | Preserve whitespace inside `<pre>`/`<code>` during post-processing (issue #24) | P1 | S | — | **MERGED** `39f4f10` (`46642eb`..`efab09f`) — split-and-map pass, not the reference commit's placeholder swap (see plan for why); corpus unchanged |
 | 026 | Two pre-existing paths that delete code-listing content (`replace_brs`, comment channel) | P1 | M | 025 | TODO — both reproduced end-to-end, byte-identical at HEAD (not 025 regressions) |
 | 024 | Escape link/image/media destinations in markdown output (injection) | P1 | M | — | **COMMITTED** `cb98bc3` on branch `advisor/remaining-plans` (unmerged) — review folded in media (iframe/video/audio) + footnote-def sinks the plan missed |
 | 001 | Fix byline lowercase-slice panic (remote DoS) | P1 | S | — | **MERGED** `00de913` |

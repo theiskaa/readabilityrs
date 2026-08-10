@@ -39,7 +39,7 @@ Ordered by status, then plan number. `P` = priority (P0 highest).
 
 | # | P | Title | Merge |
 |---|---|-------|-------|
-| 025 | P1 | Preserve `<pre>`/`<code>` whitespace in post-processing (issue #24) | `46642eb`..`efab09f` *(branch, unmerged)* |
+| 025 | P1 | Preserve `<pre>`/`<code>` whitespace in post-processing (issue #24) | `39f4f10` |
 | 024 | P1 | Escape link/image/media destinations in markdown output (injection) | `cb98bc3` |
 | 014 | P3 | Document dev workflow in CONTRIBUTING.md (CLAUDE.md left untracked) | `c4f0842` |
 | 013 | P3 | Dependency hygiene (relax v_htmlescape pin, thiserror 2.0) | `b112b2a` *(branch, unmerged)* |
@@ -111,8 +111,15 @@ Each needs a plan before execution. Full evidence in
 
 ## Changelog
 
-- **2026-08-10** — 025 committed on branch `bugfix/preserve-code-whitespace`,
-  not yet merged: `normalize_whitespace` was collapsing indentation and blank
+- **2026-08-10** — Released **v0.1.4**, the first release since 0.1.3 and the
+  one carrying plans 001–025. The CHANGELOG's `[Unreleased]` section was missing
+  seven substantive changes when the release was cut — the markdown-destination
+  injection fix (024), the MSRV 1.83 declaration (012), dependency hygiene
+  (013), the `link_density_modifier` guard, the ego-tree swap, the regex
+  statics, and the metadata split — all added before tagging.
+
+- **2026-08-10** — 025 shipped (merged as `39f4f10`, PR #25):
+  `normalize_whitespace` was collapsing indentation and blank
   lines inside `<pre>`/`<code>` (issue #24), flattening every code listing in
   `content`, `text_content`, and `markdown_content`. Fixed with a split-and-map
   pass that runs the collapsing regexes only outside preformatted elements,
@@ -124,8 +131,7 @@ Each needs a plan before execution. Full evidence in
   (quadratic, reachable once `remove_unwanted_elements` eats a `-->`) and that
   two of the tests were vacuous — the depth counter and the empty-wrapper
   routing both survived mutation. Latch and real guards added in
-  `7d78c8a`..`efab09f`. Running count: 21 shipped / 1 committed-unmerged /
-  1 blocked / 6 todo.
+  `7d78c8a`..`efab09f`. Running count: 21 shipped / 1 blocked / 6 todo.
 
 - **2026-08-09** — CI hotfix `8889569` (pushed to main): CI runs Rust
   **1.97** `@stable`, whose clippy promoted `useless_borrows_in_formatting` to

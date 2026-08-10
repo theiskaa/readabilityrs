@@ -151,7 +151,7 @@ tests; a new `tests/code_whitespace_tests.rs`.
 
 ## Outcome
 
-Committed on branch `bugfix/preserve-code-whitespace`, not yet merged. Both
+Shipped, merged to `main` as `39f4f10` (PR #25). Both
 stated STOP conditions held: the Mozilla corpus is unchanged and
 no pre-existing expectation was touched. Verified end-to-end on a chroma-shaped
 fixture (`<div class="highlight"><pre class="chroma"><code class="language-…">`
