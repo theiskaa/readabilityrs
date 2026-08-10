@@ -10,17 +10,18 @@
 ///
 /// `<pre>` is preformatted by CSS, so its whitespace is data. `<code>` is not —
 /// browsers collapse whitespace inside an inline code span — but it is listed
-/// anyway: the Markdown output reproduces code spans literally, and highlighter
-/// markup nests `<code>` inside `<pre>` where the inner tag carries the listing.
+/// anyway: the Markdown output reproduces the interior of a code span literally,
+/// and highlighter markup nests `<code>` inside `<pre>` where the inner tag
+/// carries the listing.
 const PREFORMATTED_TAGS: [&str; 2] = ["pre", "code"];
 
 /// Rewrite every stretch of `html` that lies outside a preformatted element or
 /// a comment, copying those spans through unchanged.
 ///
-/// Comments are opaque for two reasons. Their bodies are the one channel into
-/// the cleanup passes carrying unescaped `<`, so a commented-out `</pre>` would
-/// close a listing on markup the browser never renders, and a commented-out
-/// `<code>` would open a phantom block.
+/// Comments are opaque for two reasons. Their bodies are in practice the one
+/// channel into the cleanup passes carrying unescaped `<`, so a commented-out
+/// `</pre>` would close a listing on markup the browser never renders, and a
+/// commented-out `<code>` would open a phantom block.
 ///
 /// An unterminated `<pre>`/`<code>` protects the rest of the input: preserving
 /// too much is recoverable, mangling a listing is not.
@@ -28,12 +29,13 @@ pub(crate) fn map_outside_preformatted(html: &str, rewrite: impl Fn(&str) -> Str
     let mut out = String::with_capacity(html.len());
     let mut plain = 0usize;
     let mut cursor = 0usize;
+    let mut comments_close = true;
 
     while let Some(offset) = html[cursor..].find('<') {
         let lt = cursor + offset;
         let tail = &html[lt..];
 
-        let opaque_len = comment_len(tail).or_else(|| {
+        let opaque_len = comment_len(tail, &mut comments_close).or_else(|| {
             preformatted_tag_at(tail).map(|tag| block_end(tail, tag).unwrap_or(tail.len()))
         });
 
@@ -66,10 +68,22 @@ fn preformatted_tag_at(tail: &str) -> Option<&'static str> {
 /// An unterminated comment counts as no comment: treating it as opaque would
 /// silently swallow the whole rest of the document, and its body is not
 /// rendered anyway, so rewriting it costs nothing.
-fn comment_len(tail: &str) -> Option<usize> {
+///
+/// A failed search proves no `-->` lies ahead at all, so `comments_close`
+/// latches false and every later `<!--` is answered without another scan.
+/// Without the latch a run of unterminated `<!--` rescans the tail from each
+/// one, making a pass over a whole document quadratic.
+fn comment_len(tail: &str, comments_close: &mut bool) -> Option<usize> {
     let body = tail.strip_prefix("<!--")?;
-    body.find("-->")
-        .map(|end| tail.len() - body.len() + end + "-->".len())
+    if !*comments_close {
+        return None;
+    }
+
+    let len = body
+        .find("-->")
+        .map(|end| tail.len() - body.len() + end + "-->".len());
+    *comments_close = len.is_some();
+    len
 }
 
 /// Byte length of the `tag` element that starts at the beginning of `block`, or
@@ -80,12 +94,13 @@ fn comment_len(tail: &str) -> Option<usize> {
 fn block_end(block: &str, tag: &str) -> Option<usize> {
     let mut depth = 1usize;
     let mut cursor = "<".len() + tag.len();
+    let mut comments_close = true;
 
     while let Some(offset) = block[cursor..].find('<') {
         let lt = cursor + offset;
         let tail = &block[lt..];
 
-        if let Some(len) = comment_len(tail) {
+        if let Some(len) = comment_len(tail, &mut comments_close) {
             cursor = lt + len;
         } else if tail.starts_with("</") && starts_with_tag_name(&tail[2..], tag) {
             let end = lt + tail.find('>')? + 1;
@@ -177,7 +192,9 @@ mod tests {
 
     #[test]
     fn test_inner_close_tag_does_not_end_outer_block() {
-        let html = "<pre><code>outer  <code>inner  </code>  tail</code></pre>";
+        // No wrapping `<pre>`: it would make the whole span opaque on its own and
+        // leave the depth counter untested.
+        let html = "<code>outer  <code>inner  </code>  tail</code>";
 
         assert_eq!(
             squeeze(&format!("{html}<p>a    b</p>")),
@@ -255,6 +272,19 @@ mod tests {
             squeeze("<p>a    b</p><!-- <p>c    d</p>"),
             "<p>a b</p><!-- <p>c d</p>",
             "an unterminated comment must not disable the rest of the pass"
+        );
+    }
+
+    #[test]
+    fn test_many_unterminated_comments_still_normalize() {
+        // The shape that motivated the `comments_close` latch: `remove_unwanted_elements`
+        // can eat a `-->` and leave a long run of bare `<!--` behind.
+        let opens = "<!-- ".repeat(20_000);
+
+        assert_eq!(
+            squeeze(&format!("{opens}<p>a    b</p>")),
+            format!("{opens}<p>a b</p>"),
+            "latching the search off must not change what gets rewritten"
         );
     }
 
