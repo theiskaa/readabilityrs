@@ -2,8 +2,6 @@
 
 All notable changes to **readabilityrs** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each release section below is what ships as the GitHub Release notes.
 
-## [Unreleased]
-
 ## [0.1.4] - 2026-08-10
 
 A correctness, security, and infrastructure release. Two remotely triggerable panics and a stack overflow are fixed, three paths that silently deleted or corrupted extracted content are closed, Markdown output is no longer injectable, the Mozilla test suite becomes a real regression gate, opt-in output sanitization is added, and the project gains CI.
@@ -110,7 +108,6 @@ let options = ReadabilityOptions::builder()
 
 Initial release. A Rust port of Mozilla's Readability.js covering article extraction, content cleaning, and metadata handling, with document preprocessing before scoring and integration tests built on Mozilla's own test suite.
 
-[Unreleased]: https://github.com/theiskaa/readabilityrs/compare/v0.1.4...HEAD
 [0.1.4]: https://github.com/theiskaa/readabilityrs/releases/tag/v0.1.4
 [0.1.3]: https://github.com/theiskaa/readabilityrs/releases/tag/v0.1.3
 [0.1.2]: https://github.com/theiskaa/readabilityrs/releases/tag/v0.1.2
