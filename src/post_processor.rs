@@ -3,6 +3,7 @@
 //! This module implements Mozilla's _prepArticle pipeline, which cleans
 //! the extracted article content by removing unwanted elements.
 
+use crate::preformatted::map_outside_preformatted;
 use regex::Regex;
 use scraper::{Html, Selector};
 use std::sync::LazyLock;
@@ -111,20 +112,25 @@ fn cleanup_after_title_removal(html: &str) -> String {
     // Remove empty wrapper elements (iterate to handle nested empties)
     for _ in 0..3 {
         let prev = result.clone();
-        result = EMPTY_HEADER_REGEX.replace_all(&result, "").to_string();
-        result = EMPTY_HGROUP_REGEX.replace_all(&result, "").to_string();
-        result = EMPTY_DIV_REGEX.replace_all(&result, "").to_string();
-        result = EMPTY_SECTION_REGEX.replace_all(&result, "").to_string();
+        result = map_outside_preformatted(&result, |chunk| {
+            let chunk = EMPTY_HEADER_REGEX.replace_all(chunk, "");
+            let chunk = EMPTY_HGROUP_REGEX.replace_all(&chunk, "");
+            let chunk = EMPTY_DIV_REGEX.replace_all(&chunk, "");
+            EMPTY_SECTION_REGEX.replace_all(&chunk, "").into_owned()
+        });
         if result == prev {
             break;
         }
     }
 
-    // Collapse excessive whitespace
     for _ in 0..3 {
         let prev = result.clone();
-        result = MULTI_NEWLINE_REGEX.replace_all(&result, "\n\n").to_string();
-        result = WHITESPACE_LINE_REGEX.replace_all(&result, "\n").to_string();
+        result = map_outside_preformatted(&result, |chunk| {
+            let collapsed = MULTI_NEWLINE_REGEX.replace_all(chunk, "\n\n");
+            WHITESPACE_LINE_REGEX
+                .replace_all(&collapsed, "\n")
+                .into_owned()
+        });
         if result == prev {
             break;
         }
@@ -170,7 +176,9 @@ fn titles_match(title1: &str, title2: &str) -> bool {
 /// # Arguments
 /// * `html` - The raw extracted article HTML
 /// * `clean_styles_opt` - Whether to remove inline styles (implements Mozilla's _cleanStyles)
-/// * `clean_whitespace_opt` - Whether to normalize whitespace and remove empty paragraphs
+/// * `clean_whitespace_opt` - Whether to normalize whitespace and remove empty
+///   paragraphs. `<pre>` and `<code>` elements are exempt: their whitespace is
+///   content.
 pub fn prep_article(html: &str, clean_styles_opt: bool, clean_whitespace_opt: bool) -> String {
     let mut html = html.to_string();
 
@@ -234,15 +242,17 @@ fn clean_styles(html: &str) -> String {
 /// This function:
 /// - Removes excessive blank lines (more than 2 consecutive newlines)
 /// - Collapses multiple spaces into single spaces
+///
+/// `<pre>` and `<code>` elements are left byte-for-byte intact: their
+/// indentation and blank lines are part of the content, not layout noise.
 fn normalize_whitespace(html: &str) -> String {
-    // Multiple consecutive newlines -> 2 newlines (fast single pass)
     static MULTI_NEWLINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\n{3,}").unwrap());
-    // Multiple spaces -> single space
     static MULTI_SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r" {2,}").unwrap());
 
-    let result = MULTI_NEWLINE.replace_all(html, "\n\n");
-    let result = MULTI_SPACE.replace_all(&result, " ");
-    result.to_string()
+    map_outside_preformatted(html, |chunk| {
+        let collapsed = MULTI_NEWLINE.replace_all(chunk, "\n\n");
+        MULTI_SPACE.replace_all(&collapsed, " ").into_owned()
+    })
 }
 
 /// Remove unwanted elements that are never part of article content
@@ -383,6 +393,52 @@ fn remove_empty_paragraphs(html: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_normalize_whitespace_collapses_outside_preformatted() {
+        let html = "<p>a    b</p>\n\n\n\n<p>c</p>";
+
+        assert_eq!(
+            normalize_whitespace(html),
+            "<p>a b</p>\n\n<p>c</p>",
+            "layout whitespace outside code should still collapse"
+        );
+    }
+
+    #[test]
+    fn test_normalize_whitespace_preserves_pre_indentation() {
+        let html = "<pre tabindex=\"0\" class=\"chroma\"><code class=\"language-rust\">fn main() {\n    let x = 1;\n\n        deeper();\n}</code></pre>";
+
+        assert_eq!(
+            normalize_whitespace(html),
+            html,
+            "indentation and blank lines inside <pre> are content, not layout"
+        );
+    }
+
+    #[test]
+    fn test_prep_article_preserves_code_indentation() {
+        let html = "<div><p>text    here</p><pre><code>fn f() {\n    body();\n}</code></pre></div>";
+
+        let cleaned = prep_article(html, true, true);
+
+        assert!(cleaned.contains("\n    body();\n"), "got: {cleaned}");
+        assert!(cleaned.contains("<p>text here</p>"), "got: {cleaned}");
+    }
+
+    #[test]
+    fn test_title_removal_preserves_code_indentation() {
+        let html =
+            "<h1>Title</h1><pre><code>fn f() {\n\n\n    body();\n   \n    tail();\n}</code></pre>";
+
+        let cleaned = remove_title_from_content(html, "Title");
+
+        assert!(!cleaned.contains("<h1>"), "got: {cleaned}");
+        assert!(
+            cleaned.contains("{\n\n\n    body();\n   \n"),
+            "got: {cleaned}"
+        );
+    }
 
     #[test]
     fn test_remove_unwanted_elements() {

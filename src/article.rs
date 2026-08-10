@@ -70,11 +70,13 @@ pub struct Article {
 
     /// Cleaned HTML content of the article.
     ///
-    /// This contains the main article content with:
-    /// - Ads and navigation removed
-    /// - Unwanted elements filtered out
-    /// - Relative URLs converted to absolute
-    /// - Empty elements cleaned up
+    /// Navigation, ads, share widgets, and other page furniture are removed, empty
+    /// elements are dropped, and inline styles are stripped unless disabled.
+    /// Relative URLs are left as they appear in the source; they are not rewritten
+    /// against the base URL.
+    ///
+    /// This HTML is derived from untrusted input and is not sanitized by default.
+    /// See the crate-level Security section before rendering it.
     pub content: Option<String>,
 
     /// Plain text content with all HTML tags removed.

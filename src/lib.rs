@@ -139,6 +139,7 @@ pub mod markdown;
 mod metadata;
 mod options;
 mod post_processor;
+mod preformatted;
 mod readability;
 mod readerable;
 mod scoring;
