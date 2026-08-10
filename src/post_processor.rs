@@ -176,7 +176,9 @@ fn titles_match(title1: &str, title2: &str) -> bool {
 /// # Arguments
 /// * `html` - The raw extracted article HTML
 /// * `clean_styles_opt` - Whether to remove inline styles (implements Mozilla's _cleanStyles)
-/// * `clean_whitespace_opt` - Whether to normalize whitespace and remove empty paragraphs
+/// * `clean_whitespace_opt` - Whether to normalize whitespace and remove empty
+///   paragraphs. `<pre>` and `<code>` elements are exempt: their whitespace is
+///   content.
 pub fn prep_article(html: &str, clean_styles_opt: bool, clean_whitespace_opt: bool) -> String {
     let mut html = html.to_string();
 
