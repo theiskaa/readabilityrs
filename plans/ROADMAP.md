@@ -39,7 +39,7 @@ Ordered by status, then plan number. `P` = priority (P0 highest).
 
 | # | P | Title | Merge |
 |---|---|-------|-------|
-| 025 | P1 | Preserve `<pre>`/`<code>` whitespace in post-processing (issue #24) | pending |
+| 025 | P1 | Preserve `<pre>`/`<code>` whitespace in post-processing (issue #24) | `46642eb`..`efab09f` *(branch, unmerged)* |
 | 024 | P1 | Escape link/image/media destinations in markdown output (injection) | `cb98bc3` |
 | 014 | P3 | Document dev workflow in CONTRIBUTING.md (CLAUDE.md left untracked) | `c4f0842` |
 | 013 | P3 | Dependency hygiene (relax v_htmlescape pin, thiserror 2.0) | `b112b2a` *(branch, unmerged)* |
@@ -67,7 +67,7 @@ Ordered by status, then plan number. `P` = priority (P0 highest).
 |---|---|-------|--------|
 | 006 | P2 | Consolidate element removal onto the DOM path | STOP hit: correct removal deletes real article bodies (`aclu`, `mercurial`) because the keyword rules were only survivable while the old regex remover was broken. Needs **006b** (re-derive removal rules) first. Work preserved on local branch `refactor/dom-only-element-removal` (`c1568da`), not pushed. |
 
-### Todo (8)
+### Todo (6)
 
 | # | P | Title | Depends on |
 |---|---|-------|-----------|
@@ -111,14 +111,21 @@ Each needs a plan before execution. Full evidence in
 
 ## Changelog
 
-- **2026-08-10** — 025 shipped: `normalize_whitespace` was collapsing
-  indentation and blank lines inside `<pre>`/`<code>` (issue #24), flattening
-  every code listing in `content`, `text_content`, and `markdown_content`.
-  Fixed with a split-and-map pass that runs the collapsing regexes only outside
-  preformatted elements, extracted to `src/preformatted.rs`. Mozilla corpus
-  unchanged; no existing expectation edited. Review of it opened **026**: two
-  *pre-existing* paths (`replace_brs`, and comment bodies feeding the removal
-  regexes) delete listing content outright — same family, worse damage.
+- **2026-08-10** — 025 committed on branch `bugfix/preserve-code-whitespace`,
+  not yet merged: `normalize_whitespace` was collapsing indentation and blank
+  lines inside `<pre>`/`<code>` (issue #24), flattening every code listing in
+  `content`, `text_content`, and `markdown_content`. Fixed with a split-and-map
+  pass that runs the collapsing regexes only outside preformatted elements,
+  extracted to `src/preformatted.rs`. Mozilla corpus unchanged; no existing
+  expectation edited. Review of it opened **026**: two *pre-existing* paths
+  (`replace_brs`, and comment bodies feeding the removal regexes) delete listing
+  content outright — same family, worse damage. A pre-merge review round then
+  found the comment scanner rescanned to EOF from every unterminated `<!--`
+  (quadratic, reachable once `remove_unwanted_elements` eats a `-->`) and that
+  two of the tests were vacuous — the depth counter and the empty-wrapper
+  routing both survived mutation. Latch and real guards added in
+  `7d78c8a`..`efab09f`. Running count: 21 shipped / 1 committed-unmerged /
+  1 blocked / 6 todo.
 
 - **2026-08-09** — CI hotfix `8889569` (pushed to main): CI runs Rust
   **1.97** `@stable`, whose clippy promoted `useless_borrows_in_formatting` to

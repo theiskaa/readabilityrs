@@ -151,7 +151,8 @@ tests; a new `tests/code_whitespace_tests.rs`.
 
 ## Outcome
 
-Shipped. Both stated STOP conditions held: the Mozilla corpus is unchanged and
+Committed on branch `bugfix/preserve-code-whitespace`, not yet merged. Both
+stated STOP conditions held: the Mozilla corpus is unchanged and
 no pre-existing expectation was touched. Verified end-to-end on a chroma-shaped
 fixture (`<div class="highlight"><pre class="chroma"><code class="language-…">`
 with per-line `<span>` wrappers) — indentation is intact in `content` and in
@@ -176,6 +177,18 @@ both shapes benchmarked identically (1.01x/0.99x/0.99x across a typical
 article, a 40k-inline-`<code>` document, and a no-code document), so the
 simpler signature wins. The per-chunk regex overhead on code-heavy input is
 real (~3.6x on 100k code spans) but inherent to the fix and still linear.
+
+A pre-merge review round added the last three commits. `comment_len` rescanned
+to end-of-input from every `<!--`, so a run of unterminated comments made the
+pass quadratic — 1.0 s on 160 KB, reachable end-to-end because
+`remove_unwanted_elements` can eat a `-->` and leave the `<!--` behind. A failed
+search proves no `-->` lies ahead at all, so it now latches; 160 KB dropped to
+0.6 ms with byte-identical output. The same round caught two vacuous tests:
+`test_inner_close_tag_does_not_end_outer_block` wrapped its fixture in a `<pre>`
+that made the whole span opaque, leaving `block_end`'s depth counter untested,
+and nothing at all covered routing the empty-wrapper loop through the splitter.
+Both now die under mutation (`if depth == 0` → `if true`; the loop reverted to a
+global application).
 
 Verified not to be problems, so that a future reader does not re-derive them:
 no UTF-8 boundary panic is reachable (every index lands just past an ASCII

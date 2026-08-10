@@ -48,7 +48,7 @@ legacy-CMS export pattern, not a crafted input.
 
 ### Finding B — comment bodies let the removal regexes eat the article (P2)
 
-`element_to_html` (`src/content_extractor.rs:1046-1050`) emits `Node::Comment`
+`element_to_html` (`src/content_extractor.rs:1047-1052`) emits `Node::Comment`
 **verbatim** when `sanitize_content` is false — the default. A comment body is
 therefore the only channel into `prep_article` carrying unescaped `<`; text and
 attribute values both go through `v_htmlescape`. `remove_unwanted_elements`'
@@ -73,9 +73,9 @@ loses everything after `x`).
 - `src/cleaner.rs:399` `replace_brs` → `:419` `parse_element` →
   `replace_brs_in_content`; all string-level, no `<pre>` awareness.
 - `src/content_extractor.rs:669`, `:710` — the two `replace_brs` call sites.
-- `src/content_extractor.rs:1046-1050` — the comment serialization arm.
-- `src/post_processor.rs:365` `remove_unwanted_elements` — the tag-pair regexes
-  that consume a `-->`.
+- `src/content_extractor.rs:1047-1052` — the comment serialization arm.
+- `src/post_processor.rs:252` `remove_unwanted_elements` — the tag-pair regexes
+  that consume a `-->` (the `<aside>` pattern is at `:258`).
 - `src/preformatted.rs` — `map_outside_preformatted`, added by plan 025 and
   already `pub(crate)`, is the tool for finding A.
 
