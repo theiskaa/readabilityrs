@@ -99,6 +99,29 @@ fn test_title_removal_keeps_code_indentation() {
     );
 }
 
+/// Title removal strips empty wrapper elements as well as whitespace, and that
+/// loop is routed through the same splitter. An empty `<header>` written inside
+/// a listing is text the reader typed, not a wrapper to drop.
+#[test]
+fn test_title_removal_keeps_empty_wrappers_inside_a_listing() {
+    let article = parse_with(
+        "<pre><header>   </header>\n    indented\n</pre>",
+        ReadabilityOptions {
+            output_markdown: true,
+            remove_title_from_content: true,
+            ..Default::default()
+        },
+    );
+
+    let content = article.content.expect("content");
+    assert!(
+        !content.contains("<h1"),
+        "title removal did not run: {content}"
+    );
+    assert!(content.contains("<header>   </header>"), "got: {content}");
+    assert!(content.contains("\n    indented\n"), "got: {content}");
+}
+
 #[test]
 fn test_prose_whitespace_still_collapses() {
     let article = parse("<p>ordinary    prose    spacing</p><pre>  kept  </pre>");
