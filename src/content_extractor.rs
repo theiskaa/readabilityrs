@@ -7,7 +7,7 @@ use crate::{dom_utils, scoring};
 use ego_tree::NodeId;
 use scraper::{ElementRef, Html, Selector};
 use std::collections::HashMap;
-use v_htmlescape::escape;
+use v_htmlescape::escape_fmt;
 
 /// Represents an extraction attempt
 #[derive(Debug, Clone)]
@@ -1021,7 +1021,7 @@ fn element_to_html(element: ElementRef, sanitize: bool, depth: usize) -> String 
                 continue;
             }
         }
-        html.push_str(&format!(" {}=\"{}\"", name.local, escape(value)));
+        html.push_str(&format!(" {}=\"{}\"", name.local, escape_fmt(value)));
     }
 
     if is_void_element(tag_name) {
@@ -1042,7 +1042,7 @@ fn element_to_html(element: ElementRef, sanitize: bool, depth: usize) -> String 
                 }
             }
             Node::Text(text) => {
-                html.push_str(&escape(&text.text).to_string());
+                html.push_str(&escape_fmt(&text.text).to_string());
             }
             // A comment body containing `-->` closes the comment early, so the rest
             // of it is parsed as markup. Nothing downstream reads comments, so when
