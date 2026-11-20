@@ -267,13 +267,18 @@ fn remove_unwanted_elements(html: &str) -> String {
             r"(?is)<footer\b[^>]*?>.*?</footer>",
             r"(?is)<aside\b[^>]*?>.*?</aside>",
             r"(?is)<object\b[^>]*?>.*?</object>",
-            r"(?is)<embed\b[^>]*?>.*?</embed>|<embed\b[^>]*?/?>",
+            // `embed`, `input` and `link` are void elements: they never have
+            // content or a closing tag. An alternative like
+            // `<link\b[^>]*?>.*?</link>` never matches, but the regex engine
+            // scans to the end of the input to find that out, once per tag,
+            // which made this function quadratic in the size of the page.
+            r"(?i)<embed\b[^>]*>",
             r"(?is)<iframe\b[^>]*?>.*?</iframe>",
-            r"(?is)<input\b[^>]*?>.*?</input>|<input\b[^>]*?/?>",
+            r"(?i)<input\b[^>]*>",
             r"(?is)<textarea\b[^>]*?>.*?</textarea>",
             r"(?is)<select\b[^>]*?>.*?</select>",
             r"(?is)<button\b[^>]*?>.*?</button>",
-            r"(?is)<link\b[^>]*?>.*?</link>|<link\b[^>]*?/?>",
+            r"(?i)<link\b[^>]*>",
         ]
         .iter()
         .filter_map(|pattern| Regex::new(pattern).ok())
@@ -457,6 +462,29 @@ mod tests {
         assert!(cleaned.contains("<p>Content</p>"));
         assert!(!cleaned.contains("<footer"));
         assert!(!cleaned.contains("<form"));
+    }
+
+    #[test]
+    fn test_remove_unwanted_void_elements() {
+        let html = r#"<p>One<link rel="stylesheet" href="a.css"/> two<input type="text"> three<EMBED src="x.swf"> four</p>"#;
+
+        let cleaned = remove_unwanted_elements(html);
+
+        assert_eq!(cleaned, "<p>One two three four</p>");
+    }
+
+    #[test]
+    fn test_remove_unwanted_void_elements_on_large_input() {
+        // Many void tags in a large page used to take time quadratic in the
+        // page size. This input took seconds before the fix.
+        let block = r#"<link rel="mw-deduplicated-inline-style" href="mw-data:TemplateStyles:r1"><p>Some paragraph text that pads the page.</p><input type="hidden">"#;
+        let html = block.repeat(3000);
+
+        let cleaned = remove_unwanted_elements(&html);
+
+        assert!(!cleaned.contains("<link"));
+        assert!(!cleaned.contains("<input"));
+        assert_eq!(cleaned.matches("<p>Some paragraph").count(), 3000);
     }
 
     #[test]
