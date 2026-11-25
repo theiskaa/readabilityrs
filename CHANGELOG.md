@@ -2,6 +2,34 @@
 
 All notable changes to **readabilityrs** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each release section below is what ships as the GitHub Release notes.
 
+## [0.1.5] - 2026-11-25
+
+A performance and dependency release. Large pages with many `<link>`, `<input>` or `<embed>` tags no longer take time quadratic in their size, and the HTML parsing stack moves to current `scraper`, `ego-tree` and `v_htmlescape`.
+
+The minimum supported Rust version is now **1.88**, because the upgraded dependencies require it. See the upgrade notes at the end of this section.
+
+### Performance
+
+- **Void-element removal is no longer quadratic**: `<link>`, `<input>` and `<embed>` were removed with patterns such as `<link\b[^>]*?>.*?</link>|<link\b[^>]*?/?>`. These are void elements, so the closing tag never appears and the first alternative can never match, but the regex engine scanned to the end of the input to find that out, once per tag. Wikipedia pages carry dozens of `<link rel="mw-deduplicated-inline-style">` tags in the body, so time grew with the square of the page size. The patterns now match the tag alone. Measured on the Wikipedia "Readability" article with its body repeated, release build: `parse()` with Markdown output went from 117 s to 6.6 s at 8 MiB and from 3.6 s to 1.1 s at 1.3 MiB, with identical output. Contributed by [sharmis-tp](https://github.com/sharmis-tp) in [#27](https://github.com/theiskaa/readabilityrs/pull/27).
+
+### Content correctness
+
+- **A stray end tag no longer deletes content**: the same change closes a content-loss bug. The old `<input>.*?</input>` alternation did match when a stray `</input>` appeared later in the page, for example inside a comment, which is emitted verbatim on the default path, and it deleted all the real content between the two. A regression test now covers this.
+
+### Dependencies and MSRV
+
+- **Upgraded `scraper` to 0.27, `ego-tree` to 0.11 and `v_htmlescape` to 0.17**, so a project that also depends on current `scraper` builds a single copy of the parser stack instead of two. Contributed by [gzsombor](https://github.com/gzsombor) in [#26](https://github.com/theiskaa/readabilityrs/pull/26).
+- **Raised the minimum supported Rust version to 1.88**: `scraper` 0.27 uses let-chains, stabilized in 1.88, and it, `v_htmlescape` 0.17 and `cssparser-macros` 0.7 are edition 2024 crates. `rust-version` still said 1.83 after the upgrade, so a 1.83 to 1.87 toolchain failed inside a dependency instead of getting a clear error from Cargo. The new floor is checked on real toolchains: 1.88 builds the crate, 1.87 does not.
+
+### Testing and CI
+
+- **CI is green on Rust 1.100**: the new stable clippy flags `if cond { return false; } true` as `needless_bool`, which failed the build on five existing functions. They now return the boolean expression directly, with no change in behavior.
+
+**Upgrade notes**
+
+- **Rust 1.88 or later is required.** A project using Cargo's MSRV-aware resolver (the default with `resolver = "3"`, which edition 2024 implies) and declaring a lower `rust-version` stays on 0.1.4 instead of selecting this release.
+- **`scraper` types in the public API changed version.** `markdown::converter::convert` takes a `scraper::Html`, and the `markdown::rules::tables` helpers take an `ElementRef`. Callers of those functions must use `scraper` 0.27. The main API (`Readability`, `Article`, `html_to_markdown`, `is_probably_readerable`) takes and returns only strings and crate-owned types, so it is unaffected.
+
 ## [0.1.4] - 2026-08-10
 
 A correctness, security, and infrastructure release. Two remotely triggerable panics and a stack overflow are fixed, three paths that silently deleted or corrupted extracted content are closed, Markdown output is no longer injectable, the Mozilla test suite becomes a real regression gate, opt-in output sanitization is added, and the project gains CI.
@@ -108,6 +136,7 @@ let options = ReadabilityOptions::builder()
 
 Initial release. A Rust port of Mozilla's Readability.js covering article extraction, content cleaning, and metadata handling, with document preprocessing before scoring and integration tests built on Mozilla's own test suite.
 
+[0.1.5]: https://github.com/theiskaa/readabilityrs/releases/tag/v0.1.5
 [0.1.4]: https://github.com/theiskaa/readabilityrs/releases/tag/v0.1.4
 [0.1.3]: https://github.com/theiskaa/readabilityrs/releases/tag/v0.1.3
 [0.1.2]: https://github.com/theiskaa/readabilityrs/releases/tag/v0.1.2

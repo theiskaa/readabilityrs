@@ -102,7 +102,7 @@ Each needs a plan before execution. Full evidence in
 | `pick_best_srcset` splits on `,` first — corrupts CDN URLs containing commas (imgix/Cloudinary) | `elements/images.rs:115` | MED | OPEN |
 | `element_to_html` drops attribute namespace prefixes — duplicate `href` on SVG `<a xlink:href …>`, dead `xlink:href` arm | `content_extractor.rs:980` (`:976` dead) | MED | OPEN |
 | `IMG_TAG_RE` truncates at `>` inside an attribute value — deletes partial tag, leaks text | `elements/images.rs:11` | LOW | OPEN |
-| Void-element end-tag alternation swallows content up to a planted `</input>` in a comment (comments emitted verbatim on default path) | `post_processor.rs:279`, `content_extractor.rs:1004` | LOW | OPEN |
+| Void-element end-tag alternation swallows content up to a planted `</input>` in a comment (comments emitted verbatim on default path) | `post_processor.rs:279`, `content_extractor.rs:1004` | LOW | ✅ CLOSED (`b5c50eb`, PR #27 — void tags matched alone; regression test added in v0.1.5) |
 | `cleaner::parse_element` can build a reversed byte range (latent; live only if `replace_brs` is exported) | `cleaner.rs:411` | LOW | OPEN |
 | Mozilla content assertion still weak — ±100% band admits some empty content; tighten to ±15–20% | `tests/mozilla_test_suite.rs` | LOW (test quality) | PARTLY CLOSED (`3b8f337` added unconditional `> 0` guard) |
 | `link_density_modifier` NaN/±∞ panic in `partial_cmp().unwrap()` | `content_extractor.rs:229`, `scoring.rs:129` | MED | ✅ CLOSED (`98c6fdf`, `08cf31f`) |
@@ -110,6 +110,15 @@ Each needs a plan before execution. Full evidence in
 ---
 
 ## Changelog
+
+- **2026-11-25** — Released **v0.1.5**: PR #26 (scraper 0.27 / ego-tree
+  0.11 / v_htmlescape 0.17) and PR #27 (void-element regexes, which fixed a
+  quadratic slowdown and closed the planted-`</input>` finding). Before
+  tagging: main's CI was red on clippy 1.100 `needless_bool` (5 sites, fixed),
+  and #26 had silently raised the real MSRV to **1.88** (scraper uses
+  let-chains) while `rust-version` still said 1.83. Verified on toolchains
+  (1.88 builds, 1.87 does not) and declared. CI still runs only `@stable`, so a
+  pinned-MSRV job remains the follow-up that would have caught this.
 
 - **2026-08-10** — Released **v0.1.4**, the first release since 0.1.3 and the
   one carrying plans 001–025. The CHANGELOG's `[Unreleased]` section was missing

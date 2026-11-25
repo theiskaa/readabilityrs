@@ -266,7 +266,9 @@ re-discovered; each needs a plan before execution.
   `<input>…</input>` patterns swallow content up to a stray `</input>` planted in
   a comment (comment bodies are emitted verbatim at `content_extractor.rs:1004`).
   LOW; plan 022 removed the comment vector **only when `sanitize_content` is on**
-  — comments are still emitted verbatim on the default path.
+  — comments are still emitted verbatim on the default path. **CLOSED** in
+  `b5c50eb` (PR #27): void tags are now matched alone, so no end tag can extend
+  the match; regression test added for v0.1.5.
 - **`cleaner::parse_element` can build a reversed byte range**
   (`src/cleaner.rs:411`): `&html[opening_end+1..closing_start]` with no ordering
   check. Latent — not currently reachable, becomes live if `replace_brs` is ever

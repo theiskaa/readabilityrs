@@ -32,7 +32,7 @@ Here's how to contribute and submit your pull request:
 
 ## Development
 
-This is a Rust library (edition 2021, MSRV 1.83). Everything runs through Cargo.
+This is a Rust library (edition 2021, MSRV 1.88). Everything runs through Cargo.
 
 | Task | Command |
 |------|---------|
