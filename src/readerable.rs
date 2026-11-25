@@ -209,13 +209,8 @@ fn is_scored_candidate(node: ElementRef) -> bool {
     let id = node.value().attr("id").unwrap_or("");
     let match_string = format!("{class} {id}");
 
-    if REGEXPS.unlikely_candidates.is_match(&match_string)
-        && !REGEXPS.ok_maybe_its_a_candidate.is_match(&match_string)
-    {
-        return false;
-    }
-
-    true
+    !REGEXPS.unlikely_candidates.is_match(&match_string)
+        || REGEXPS.ok_maybe_its_a_candidate.is_match(&match_string)
 }
 
 fn has_direct_br_child(node: ElementRef) -> bool {

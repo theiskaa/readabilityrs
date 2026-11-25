@@ -897,11 +897,7 @@ fn is_viable_best_candidate(element: ElementRef, score: f64) -> bool {
     .to_lowercase();
 
     const NAV_KEYWORDS: [&str; 6] = ["nav", "navbar", "menu", "breadcrumbs", "sidebar", "widget"];
-    if NAV_KEYWORDS.iter().any(|kw| match_string.contains(kw)) && link_density > 0.3 {
-        return false;
-    }
-
-    true
+    !(NAV_KEYWORDS.iter().any(|kw| match_string.contains(kw)) && link_density > 0.3)
 }
 
 /// Check whether an attribute name is an event-handler attribute (`onclick`, `onerror`, …).

@@ -659,11 +659,7 @@ pub(super) fn should_prefer_dom_byline(
         !MONTH_KEYWORDS.contains(&lower)
     });
 
-    if tokens.is_empty() {
-        return false;
-    }
-
-    true
+    !tokens.is_empty()
 }
 
 pub(super) fn should_prefer_caps_standfirst(existing: &str, candidate: &str) -> bool {

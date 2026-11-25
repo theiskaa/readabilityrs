@@ -602,12 +602,7 @@ fn node_has_allowed_video(element: ElementRef) -> bool {
             return true;
         }
     }
-    if node_has_tag(element, "object")
-        && REGEXPS.videos.is_match(&element.text().collect::<String>())
-    {
-        return true;
-    }
-    false
+    node_has_tag(element, "object") && REGEXPS.videos.is_match(&element.text().collect::<String>())
 }
 
 fn detect_data_table(table: ElementRef) -> bool {

@@ -555,11 +555,7 @@ fn looks_like_navigation_menu(text: &str) -> bool {
             }
 
             let lower = stripped.to_lowercase();
-            if lower.contains("by") || lower.contains("staff") || lower.contains("editor") {
-                return false;
-            }
-
-            true
+            !(lower.contains("by") || lower.contains("staff") || lower.contains("editor"))
         });
 
         if all_look_like_locations && lines.len() >= 2 {
