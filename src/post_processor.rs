@@ -488,6 +488,20 @@ mod tests {
     }
 
     #[test]
+    fn test_remove_unwanted_void_elements_keeps_content_before_stray_end_tag() {
+        // A stray `</input>` (here inside a comment, which is emitted verbatim on
+        // the default path) used to close the old `<input>.*?</input>` alternation,
+        // deleting every byte of real content between the two.
+        let html = "<p>One<input type=\"text\"> kept text <!-- </input> --> two</p>";
+
+        let cleaned = remove_unwanted_elements(html);
+
+        assert!(!cleaned.contains("<input"));
+        assert!(cleaned.contains("kept text"));
+        assert!(cleaned.contains("two"));
+    }
+
+    #[test]
     fn test_remove_empty_paragraphs() {
         let html = r#"
             <div>
